@@ -1,0 +1,26 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: \chead{Übungsblatt 1 - ANCOVA}
+---
+
+# Kausale Effektschätzung - ANCOVA
+
+## Aufgaben
+
+1. Laden Sie den `spf2.rda` Datensatz (Moodle - Datensätzeordner) und lassen Sie sich die Deskriptivstatistiken ausgeben, auch die gruppenspezifischen Mittelwerte. 
+
+2. Schätzen Sie den Effekt der Schulform auf die Hören-Kompetenz (`hoeren`) ohne Berücksichtigung von Kovariaten.
+
+3. Zentrieren Sie die Werte des sozioökonomischen Status (`HISEI`) am Gesamtmittelwert und nehmen Sie die zentrierte Variable als Kovariate in das Modell auf (traditionelle ANCOVA). 
+
+4. Erstellen Sie ein Streudiagramm mit den gruppenspezifischen Regressionsgeraden, die sich aus der klassischen ANCOVA ergeben. Woran erkennen Sie in der Abbildung den Effekt der Schulform?
+
+5. Schätzen Sie nun den ATE und ATT mit Hilfe der generalisierten ANCOVA. Erstellen Sie auch hier ein Streudiagramm mit Regressionsgeraden.
+
+6. Berechnen Sie auf Basis dieses Modells den $z$-bedingten ATE für Kinder mit minimalem sozioökonomischen Status.
+
+7. Installieren und aktivieren Sie das R-Paket `EffectLiteR`. Fordern Sie die Effektschätzer aus Aufgaben 2, 3 und 5 an (einfacher t-Test, traditionelle ANCOVA, generalisierte ANCOVA). Benutzen Sie dafür entweder die graphische Oberfläche mit der `effectLiteGUI()`-Funktion oder den Befehl `effectLite()` mit den gleichen Einstellungen für die Argumente `method`, `missing` und `homoscedasticity` wie sie im Skript verwendet wurden.
+Vergleichen Sie die Ergebnisse aus Aufgaben 2, 3 und 5 mit dem EffectLiteR- Output.

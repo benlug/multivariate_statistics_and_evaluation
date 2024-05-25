@@ -1,0 +1,308 @@
+---
+toc: true
+toc-title: "Inhaltsverzeichnis"
+toc-depth: 3
+number-sections: true
+
+urlcolor: blue
+linkcolor: magenta
+
+callout-icon: false
+
+author: "Benedikt Lugauer"
+
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/packages.tex
+        - text: \chead{Kausale Effektschätzung in R - Propensity Score Methods II}
+
+geometry:
+  - marginparsep = 0.3in
+  - marginparwidth = 0in
+  - left = 0.85in
+  - right = 0.85in
+---
+
+# Propensity Score Methods II - ANCOVA
+
+::: {.callout-note}
+## **Lernziele und Vorgehen** 
+Ziel: Präzise Schätzung von ATE und ATT. Dabe gibt es verschiedene Möglichkeiten den Propensity Score zu berücksichtigen.
+
+1. Matching über PS und anschließend einfacher $t$-Test
+2. Matching und Kombination mit ANCOVA
+    a) Kontrolle des PS in ANCOVA
+    b) Kontrolle von PS und weiteren Kovariaten in ANCOVA
+3. Falls Matching schwierig bzw. Stichprobe zu klein
+    a) Matching von PS-Strata (Schichten)
+    b) Gewichtung der Personen anhand ihrer PS
+:::
+
+## Datensatz
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2208622}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+Nach der Vorbereitung und PS-Modell aus Sitzung 3 nutzen wir `match.data()`, um den gematchten Datensatz zu erhalten.
+
+```{r}
+#| echo: false
+setwd(this.path::this.dir())
+load("../Datensätze/bdi_data.rda")
+library(MatchIt)
+set.seed(12345)  
+ps_mi2 <- matchit(group ~ bdi1 + cogn + age + sess + addic, data = bdi_data, 
+                  method = "optimal", 
+                  distance = "logit")
+```
+
+```{r}
+psdat <- match.data(ps_mi2)
+head(psdat)
+```
+
+- Der erzeugte Datensatz `psdat` enthält nur noch die gematchten Personen (152 von 255).
+- Die Variable `distance` enthält den geschätzten Propensity Score der jeweiligen Person und ist mit unserem vorher erzeugten `Pscore` identisch.
+
+## $t$-Test mit gematchten Stichproben
+
+```{r}
+m1 <- lm(bdi2 ~ group, data = psdat)
+summary(m1)$coef
+```
+
+- $\widehat{ATE} = \widehat{ATT} = \alpha_1 =$ `r round(coef(m1)[2], 2)` 
+
+## Klassische ANCOVA: Kontrolle des PS-Logits  
+
+Der Propensity Score Logit kann nach dem PS Matching noch als Kovariate in das Regressionsmodell zur Treatment-Schätzung aufgenommen werden. Hierzu erstellen wir uns in unserem gematchten Datensatz zunächste eine Variable welche den zentrierten Logit der propensity scores enthält. Der Logit des PS wird (anstelle des PS selbst) als Kovariate ins Modell aufgenommen, da der PS Logit eher linear mit dem outcome zusammenhängt als der PS. 
+
+```{r}
+# Logit als Variable erstellen und zentrieren
+psdat$logit <- car::logit(psdat$distance)
+psdat$logit <- scale(psdat$logit, scale = FALSE)
+# Als Kovariate ins Modell aufnehmen
+m2 <- lm(bdi2 ~ logit + group, data = psdat)
+summary(m2)$coef
+```
+
+- $\widehat{ATE} = \widehat{ATT} = \alpha_2 =$ `r round(coef(m2)[3], 2)` 
+  
+## Generalisierte ANCOVA: Interaktion der Gruppe mit PS-Logit  
+
+```{r}
+m3 <- lm(bdi2 ~ logit*group, data = psdat)
+summary(m3)$coef
+```
+
+- Kovariate $Z$ hier zentrierter PS-Logit, daher $E(Z)=0$
+- $\widehat{ATE} = \alpha_{2} + \alpha_{3}\cdot E(Z) = \alpha_{2} =$ `r unname(round(coef(m3)[3]+coef(m3)[4]*mean(psdat$logit), 2))` 
+- $\widehat{ATT}_{X=1} = \alpha_{2} + \alpha_{3}\cdot E(Z|X=1) =$ `r round(coef(m3)[3],2)` $+$ `r  round(coef(m3)[4],2)` $\cdot$ `r round(mean(psdat$logit[psdat$group==1]), 2)` = `r  unname(round(coef(m3)[3]+coef(m3)[4] * mean(psdat$logit[psdat$group==1]), 2))`
+- $E(Z\mid X=1)$ berechnet über:
+```{r}
+tapply(psdat$logit, psdat$group, mean)
+```
+
+# Propensity Score Stratifizierung
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2208623}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+Die Propensity Score Stratifizierung ist eine Methode, die das Matching von Personen basierend auf der Bildung einer bestimmten Anzahl von homogenen Strata (oder Schichten) *Q* in Bezug auf den Propensity Score durchführt. Innerhalb jeder dieser Strata wird dann eine Schätzung des kausalen Effekts durchgeführt. Der Gesamteffekt wird dann als gewichtetes Mittel über die stratum-spezifischen kausalen Effekte berechnet. Eine häufige Wahl für die Anzahl der Strata *Q* ist fünf (Voreinstellung/Default: 6 Strata), obwohl es durchaus üblich ist, je nach den spezifischen Bedürfnissen der Analyse mehr oder weniger Strata zu verwenden. Mit `MatchIt` wird diese Methode als *Subclassification* bezeichnet und kann durch den Aufruf von `method = "subclass"` angewendet werden.
+  
+```{r}
+#| results: hide
+stra5 <- matchit(group ~ bdi1 + age + cogn + sess + addic,
+                 data = bdi_data, 
+                 distance = "logit",
+                 method = "subclass",  # Stratifizierung
+                 subclass = 5)         # Anzahl Strata        
+```
+
+- Das Argument `subclass` gibt entweder an, wieviele Subklassen / Strata gebildet werden sollen (ganze Zahl eingeben), oder, einen Vektor mit Grenzenwerten der Quantile der gewählten Distanzmetrik (Wahrscheinlichkeiten zwischen 0 und 1). 
+
+Anzahl Personen in den Strata: 
+```{r}
+Nq <- t(summary(stra5)$qn)
+Nq
+```
+
+Gruppenspezifische PS-Verteilungen innerhalb der Strata:  
+```{r}
+#| fig-height: 5
+plot(stra5, type = "jitter", interactive = FALSE)
+```
+
+- Verschiedene Strata durch vertikale Striche dargestellt / voneinander getrennt
+- Fläche der Kreise ist proportional zur Gewichtung (`weight`) der Beobachtung
+
+## Bewertung der Balance
+
+- Zusammenfassung pro Subklasse und über Subklassen hinweg
+```{r}
+#| eval: false
+summary(stra5, standardize = TRUE, subclass = TRUE)
+```
+
+## QQ-Plots der Kovariaten
+
+- Betrachtung der Verteilung einzelner Kovariaten für jeweilige Schicht (hier: Stratum 3)
+
+```{r}
+#| fig-align: left
+#| fig-height: 4
+plot(stra5, type = "QQ", 
+     which.xs = c("bdi1", "cogn"),
+     interactive = FALSE, 
+     subclass = 3)
+```
+
+## Effektschätzung
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2208624}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+- Bei Stratifizierung wird zunächst pro Stratum ein Treatmenteffekt geschätzt und die geschätzten Effekte der Strata werden hinterher miteinander verrechnet
+- Dafür werden in einem ersten Schritt, Stratum- und gruppenspezifische Mittelwerte der Outcome-Variable erstellt (stratum-spezifische *Potential Outcomes*)
+- Information über die Größse der Strata werden aus `Nq` (s. oben) hinzugefügt
+
+```{r}
+dat5 <- match.data(stra5)
+long <- aggregate(bdi2 ~ subclass + group, 
+                  data = dat5, mean)
+long
+wide <- reshape(long, direction = "wide", sep = "_",
+                timevar = "group", idvar = "subclass")
+wide <- cbind(wide, Nq[-6, c("Treated", "Total")])
+wide
+```
+
+- In einem zweiten Schritt wird der stratum-spezifische ATE für jedes Stratum *q* geschätzt (Differenz der stratum-spezifischen *potential outcomes*)
+  
+```{r}
+wide$ATEq <- wide$bdi2_1 - wide$bdi2_0
+wide
+```
+
+- Im dritten Schritt werden ATE und ATT als gewichtete Mittelwerte über die stratum-spezifischen Treatmenteffekte berechnet
+- Gesamt-Effekt als Summe der gewichteten Stratum-Effekte (gewichtetet Mittelwert)
+  
+### ATE
+
+- Relative Häufigkeit des Stratums als Gewicht $W_{q}$ für ATE
+$$\widehat{ATE}=\sum_{q=1}^Q W_{q} \widehat{ATE}_{q}$$
+  
+```{r}
+wide$Wq <- wide$Total / sum(wide$Total)
+ATE <- sum(wide$Wq * wide$ATEq)
+ATE
+```
+
+### ATT
+
+- Gewichtung mit Häufigkeit der Treatment-Gruppe innerhalb des Stratums relativ zur Treatment-Häufigkeit
+  $$\widehat{ATT}=\sum_{q=1}^Q W_{Tq} \widehat{ATE}_{q}$$
+  
+```{r}
+wide$WTq <- wide$Treated / sum(wide$Treated)
+ATT <- sum(wide$WTq * wide$ATEq)
+ATT
+```
+
+# Propensity Score Gewichtung
+
+Die Propensity Score Gewichtung (PS-Gewichtung) versucht, genau wie beim Matching, den Zustand eines Zufallsexperiments erzeugen, indem Personen mit ähnlichen Eigenschaften aus der Treatment- und Kontrollgruppe auf der Grundlage ihres Propensity-Scores, also der Wahrscheinlichkeit, die Behandlung zu erhalten, gewichtet wird. Das Ziel ist auch hier eine Balance in den Kovariaten zwischen den Gruppen zu schaffen, was zu einer genaueren Schätzung des Treatmenteffekts führt.
+
+Um die Effekte einer Intervention oder Behandlung zu berechnen, wird im Rahmen der PS-Gewichtung jeder Person ein Gewicht zugewiesen. Dieses Gewicht hängt vom Propensity Score dieser Person und ihrer Gruppenzugehörigkeit ab - also ob sie zur Kontroll- oder Treatmentgruppe gehört.
+
+In der Kontrollgruppe erhalten Personen mit einem hohen Propensity Score ein hohes Gewicht. Das bedeutet, dass Personen, die eine hohe Wahrscheinlichkeit haben, die Behandlung zu erhalten (basierend auf ihren beobachteten Kovariaten), aber die Behandlung tatsächlich nicht erhalten haben, eine größere Bedeutung in der Analyse erhalten. Umgekehrt erhalten in der Treatmentgruppe Personen mit einem geringen Propensity Score ein hohes Gewicht. Das heißt, Personen, die eine geringe Wahrscheinlichkeit haben, die Behandlung zu erhalten, aber die Behandlung tatsächlich erhalten haben, werden in der Analyse stärker berücksichtigt.
+
+Das Gewicht wird üblicherweise durch den Kehrwert des Propensity Scores für die Treatmentgruppe und den Kehrwert von $1 - \hat{\pi_i}$ für die Kontrollgruppe berechnet. Diese Art der Gewichtung nennt man auch *Inverse Probability Weighting*.
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2208625}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+\begin{align*}
+  W_i &=  \frac{X_i}{\hat{\pi}_i} + \frac{1-X_i}{1-\hat{\pi}_i} \\
+  &= \frac{X_i}{P(X=1|\mathbf{Z})} + \frac{1-X_i}{1-P(X=1|\mathbf{Z})}
+\end{align*}
+  
+```{r}
+dat5$ATEweight <- ifelse(test = dat5$group == 1,
+                         yes = 1 / dat5$distance,
+                         no = 1 / (1 - dat5$distance))
+```
+
+- `ifelse` gibt einen Vektor aus, der für alle Personen mit einem `TRUE` auf der test-Variable (alle Personen mit `group==1`) den unter dem Argument `yes` angegeben Wert enthält (hier: $\frac{1}{\hat{\pi}_i}$), und für alle Personen mit einem `FALSE` auf der `test`-Variable (alle Personen mit `group==0`) den unter dem Argument `no` angegeben Wert enthält (hier: $\frac{1}{1-\hat{\pi}_i}$)
+
+## Effektschätzung
+
+### ATE
+
+Der ATE wird durch die Differenz der gewichteten Mittelwerte zwischen den Gruppen geschätzt. In R können wir für die Berechnung der gewichteten Mittelwerte die `weighted.mean()`-Funktion nutzen. Diese Funktion nimmt mit dem Argument `x` die Daten entgegen für die der gewichtete Mittelwert ausgerechnet werden soll. Dem Argument `w` müssen die entsprechenden Gewichte, in unserem Fall $W_i$ übergeben werden.
+  
+```{r}
+# Kontrollgruppe
+gMW_KG <- weighted.mean(x = dat5$bdi2[dat5$group == 0],        
+                        w = dat5$ATEweight[dat5$group == 0])
+# Treatmentgruppe
+gMW_IG <- weighted.mean(x = dat5$bdi2[dat5$group == 1],        
+                        w = dat5$ATEweight[dat5$group == 1])
+# ATE als Differenz der gewichteten Mittelwerte der Gruppen
+gMW_IG - gMW_KG
+``` 
+
+- $\widehat{ATE}=$`r round(gMW_IG - gMW_KG,2)`
+  
+Der ATE kann auch im Regressionsmodell über den WLS-Schätzer (`Weighted Least Squares`) mit `lm()` über das `weights`-Argument geschätzt werden:
+
+```{r} 
+wATE <- lm(bdi2 ~ group, weights = ATEweight, data = dat5) 
+coef(wATE) 
+``` 
+
+### ATT
+
+Bei der Berechnung des ATT erhalten alle Personen in der Treatmentgruppe, das heißt diejenigen, die tatsächlich das Treatment erhalten haben, ein Gewicht von 1. Sie werden also vollständig in der Analyse berücksichtigt.
+
+Personen in der Kontrollgruppe erhalten jedoch ein Gewicht, das auf ihrem Propensity Score basiert. Ihnen werden die Odds ihres Propensity Scores als Gewicht zugewiesen. Das bedeutet, dass Personen in der Kontrollgruppe, die eine höhere Wahrscheinlichkeit haben, die Behandlung zu erhalten (basierend auf ihren beobachteten Eigenschaften), in der Analyse stärker berücksichtigt werden.
+
+$$ W_i =  X_i + \frac{(1-X_i)\cdot \hat{\pi}_i}{1-\hat{\pi}_i} $$
+
+Berechnung der Gewichte in R mit `ifelse()`:
+```{r}
+dat5$ATTweight <- ifelse(test = dat5$group == 1, 
+                         yes = 1,
+                         no = dat5$distance/(1 - dat5$distance))
+gMW_KG <- weighted.mean(x = dat5$bdi2[dat5$group == 0],        
+                        w = dat5$ATTweight[dat5$group == 0])
+gMW_IG <- weighted.mean(x = dat5$bdi2[dat5$group == 1],        
+                        w = dat5$ATTweight[dat5$group == 1])
+# ATT als Differenz der gewichteten Mittelwerte:
+gMW_IG - gMW_KG
+```
+
+- $\widehat{ATT}=$`r round(gMW_IG - gMW_KG,2)`
+
+# Zusammefassung - Matching- und Propensity Score Methoden
+
+1. **Exaktes Matching**: Hierbei werden Treatment- und Kontrolleinheiten anhand exakt übereinstimmender Kovariaten gematched. Diese Methode kann zwar einfach sein, ist aber oft einschränkend und bei hochdimensionalen Kovariaten oft unpraktisch, da es unwahrscheinlich ist, exakte Übereinstimmungen zu finden.
+
+2. **Nearest Neighbor Matching**: Bei dieser Methode wird für jede Behandlungseinheit eine Kontrolleinheit (oder mehrere) ausgewählt, die der Behandlungseinheit am ähnlichsten ist. Die Ähnlichkeit wird basierend anhand einer bestimmten Distanzmetrik berechnet, die auf den Kovariaten oder den Propensity Scores basieren kann. 
+
+3. **Propensity Score Matching**: Bei dieser Methode werden Treatment- und Kontrolleinheiten anhand ihrer Propensity Scores (der geschätzten Wahrscheinlichkeit, die Behandlung zu erhalten) gematched. Zur Schätzung der Propensity Scores wird oft die logistische Regression verwendet.
+
+4. **Propensity Score Stratification**: In dieser Methode werden die Propensity Scores verwendet, um die Daten in verschiedene Strata oder Gruppen zu unterteilen. Innerhalb dieser Strata wird angenommen, dass Behandlungs- und Kontrolleinheiten ähnliche Propensity Scores haben. Die Effektschätzung erfolgt dann innerhalb dieser Strata und die geschätzten Effekte der Strata wereden aggregiert. Die Annahme hier ist, dass das Ergebnis innerhalb jedes Stratums unabhängig von der Behandlungszuordnung ist, bedingt durch den Propensity Score.
+
+5. **Propensity Score Weighting**: Bei dieser Methode werden Gewichte basierend auf den Propensity Scores berechnet, um eine gewichtete Stichprobe zu erstellen, in der die Verteilung der Kovariaten zwischen Behandlungs- und Kontrollgruppe ausgeglichen ist. 
+
+6. **Propensity Score Regression**: Bei dieser Methode werden die Propensity Scores direkt in ein Regressionsmodell aufgenommen, um den kausalen Effekt zu schätzen. Es wird kein Matching oder eine Gewichtung durchgeführt.
+
+
+
+

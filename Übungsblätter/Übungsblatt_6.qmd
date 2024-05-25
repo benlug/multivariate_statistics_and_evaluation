@@ -1,0 +1,36 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: |
+            \chead{Übungsblatt 6 - Längsschnittanalysen II}
+            \fancyfoot[CO]{J. Holtmann, B. Lugauer, K. Koslowski | Multivariate Statistik \& Evaluation | SS 23}
+---
+
+# Aufgaben: Längsschnittanalaysen und Veränderungsmessung II
+
+## Aufgabe 1: Quadratisches Wachstum
+
+Laden Sie den Datensatz `affect.rda`. Betrachten Sie die Aufgaben aus der letzten Sitzung (Längsschnittanalysen II).
+Schätzen Sie erneut das Modell, in dem die gute vs. schlechte Stimmung (Variable gut) linear von der Tageszeit vorhergesagt wird. Das Ausgangsniveau der Stimmung darf dabei über Personen variieren (random intercept Modell). Erweitern Sie das Modell dann zunächst um einen zufälligen Effekt der linearen Komponente (random slopes Modell). Betrachten Sie die Ergebnisse und interpretieren Sie diese.
+
+Erstellen Sie im nächsten Schritt ein Modell mit zusätzlichem quadratischen Trend (fixed effect). Um Problemen vorzubeugen, reskalieren Sie die Variable time vor der Schätzung, indem Sie sie halbieren. Erweitern Sie das Modell nun um einen zufälligen Effekt der quadratischen Komponente. Nutzen Sie zur Schätzung der Modelle bei Bedarf einen anderen Optimizer. Konsultieren Sie ggf. die Hilfe-Funktion um diesen auszuwählen.
+
+Für welches der vier vorhergehenden Modelle würden Sie sich aufgrund derInferenzstatistik entscheiden? 
+(Achten Sie bei Modellvergleichen darauf, dass alle Modelle mit der gleich skalierten Prädiktorvariable time geschätzt wurden).
+
+
+## Aufgabe 2: Level-1 und Level-2 Kovariaten
+
+Nehmen Sie in das quadratische Wachstumskurvenmodell der guten Stimmung (mit Random Slopes nur für die lineare Komponente) das Auftreten von positiven (Variable pos) und negativen Ereignissen (neg) als L1-Prädiktoren auf. Sind die Prädiktoren bedeutsam für die gute Stimmung?
+
+Welcher Anteil der Level-1 Residualvarianz kann durch Hinzunahme der Prädiktoren pos und neg im Vergleich zum Ausgangsmodell (quadratische Wachstumskurvenmodell) aufgeklärt werden? Konsultieren Sie zum Lösen der Aufgabe das Skript zu R^2 in Mehrebenenmodellen aus dem Wintersemester.
+
+Untersuchen Sie, ob der BDI einen Einfluss auf das Stimmungsniveau zu Beginn des Tages und auf die individuellen Verlaufskomponenten der guten Stimmung hat. Gehen Sie von einem Modell ohne zusätzliche L1-Prädiktoren aus. 
+Wieviel Varianz in den random slopes kann durch die Hinzunahme der Cross-level Interaktion erklärt werden?
+
+
+## Aufgabe 3: Kontexteffekte 
+
+Untersuchen Sie, ob die Anspannung (positiv kodiert als Variable ruhig) auf dem within- (direkt zeitlich) und/oder auf dem between-level (als tagesspezifischer Trait) einen Einfluss auf die gute Stimmung hat. Nutzen Sie hierfür der Einfachheit halber ein random slopes Modell mit linearem Verlauf (ohne quadratischen Effekt). Zentrieren Sie dafür die Variable ruhig an ihrem jeweiligen cluster-mean. Zentrieren Sie die personen-spezifische mittlere Anspannung am grand mean.

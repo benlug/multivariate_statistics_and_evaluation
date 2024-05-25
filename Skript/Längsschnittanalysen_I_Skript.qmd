@@ -1,0 +1,417 @@
+---
+toc: true
+toc-title: "Inhaltsverzeichnis"
+toc-depth: 3
+number-sections: true
+
+urlcolor: blue
+linkcolor: magenta
+
+callout-icon: false
+
+author: "Benedikt Lugauer"
+
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/packages.tex
+        - text: |
+            \chead{Längsschnittanalysen I}
+            \fancyfoot[CO]{J. Holtmann, K. Koslowski, B. Lugauer | Multivariate Statistik \& Evaluation | SS 23}
+            \renewenvironment{Shaded}
+              {\begin{snugshade}
+              \begin{singlespace}
+              \linespread{1}
+              }
+              {\end{singlespace}
+              \end{snugshade}
+            }
+
+geometry:
+  - marginparsep = 0.3in
+  - marginparwidth = 0in
+  - left = 0.85in
+  - right = 0.85in
+---
+
+```{r}
+#| echo: false
+#| message: false
+setwd(this.path::this.dir())
+load("../Datensätze/affect.rda")
+load("../Datensätze/affect_wide_short.rda")
+source("_functions/help_console.R")
+library(ggplot2)
+```
+
+# Längsschnittanalaysen und Veränderungsmessung I
+
+Im folgenden werden wir verschiedene Modelle zur Modellierung von Variabilität und Veränderung über die Zeit betrachten. Wir starten in dieser ersten Sitzung mit einem einfachen Variabilitätsmodell sowie einem einfachen Wachstumskurvenmodell. Beide Modelle werden wir einmal im Rahmen der Mehrebenenanalyse und einmal im Rahmen eines Strukturgleichungsmodells aufsetzen. Die Modelle werden in der folgenden Sitzung erweitert.
+
+## Lernziele und Vorgehen  
+
+Sie können ein einfaches Variabilitätsmodell (Latent State-Trait Modell) sowie ein lineares Wachstumskurvenmodell im wide- und im long-format Design spezifizieren und die Ergebnisse angemessen interpretieren. 
+
+Wir werden dafür wie folgt vorgehen:
+
+::: {.callout-note}
+## **Lernziele und Vorgehen** 
+  1. Betrachtung der beiden Datensätze (wide- und long-Format)
+  2. Variabilitätsmodell
+     a) Mehrebenenalyse Nullmodell mit lme4
+     b) Latent State-Trait Modell in lavaan
+     c) Vergleich der Ergebnisse
+  3. Wachstumskurvenmodell
+     a) Mehrebenenanalyse mit lme4
+     b) Strukturgleichungsmodell in lavaan
+     c) Vergleich der Ergebnisse
+:::
+
+
+## Vorbereitung 
+
+Wir benötigen in dieser Sitzung die folgenden Pakete.
+
+```{r}
+#| message: false
+#| warning: false
+if (!require("lme4")) install.packages("lme4")
+if (!require("ICC")) install.packages("ICC")
+if (!require("lavaan")) install.packages("lavaan")
+if (!require("ggplot2")) install.packages("ggplot2")
+```
+
+## Datensatz 
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2212531}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+Das vorliegende Datenbeispiel stammt aus einer Ambulatory-Assessment Studie, welche u.a. Stimmungsregulation in klinischen Stichproben untersucht. Aus den insgesamt 4 Tagen a je 12 Messzeitpunkten liegen hier die Daten des ersten Tages (12 Messungen) der gesunden Kontrollprobandinnen vor. Der Zeitabstand zwischen den 12 Messungen beträgt im Mittel 58.11 Minuten (Median = 63 Min, SD = 16.67 Min).
+
+Für Informationen zu den Daten siehe z.B.: 
+
+Santangelo, P. S., Reinhard, I., Koudela-Hamila, S., Bohus, M., Holtmann, J., Eid, M., \& Ebner-Priemer, U. W. (2017). The temporal interplay of self-esteem instability and affective instability in borderline personality disorder patients’ everyday lives. \textit{Journal of abnormal psychology, 126,} 8 , 1057.
+
+Der Datensatz im long-Format (`affect.rda`) enthält die Stimmungsitems *gut* (valence), *wach* (energetic arousal), und *ruhig* (tense arousal),  zwei dichotome Variablen (*pos* und *neg*) welche jeweils kodieren ob ein positives oder negative Ereignis stattgefunden hat seit der letzten Abfrage, sowie ein Maß für die Depressivität der Probandinnen (*BDI*; stabiler Wert, einmalig erfasst). Die Variable `ID` kodiert die Person, die Variable `MZP` nummeriert die Messungen pro Person durch, und die Variable `time` kodiert die seit der ersten Beobachtung vergangene Zeit kontinuierlich in Stunden.
+
+
+```{r}
+#| eval: false
+setwd("C:/Users/me/myworkingdirectory")
+load("affect.rda")
+```
+
+```{r}
+str(affect)
+head(affect)
+```
+
+Im long-Format Datensatz `affect` sind die Messungen / Zeitpunkte geschachtelt in Personen (`ID`).
+
+Der Datensatz `affect_wide_short.rda` (Objektname `wach_wide`) ist hingegen ein wide-Format Datensatz, welcher nur das Item `wach` für alle Personen über die 12 Messzeitpunkte hinweg enthält. Hier sind die 12 Messzeitpunkte als einzelne Variablen in separaten Spalten abgespeichert (jede Person erhält nur eine Zeile mit allen Daten).
+
+```{r}
+#| eval: false
+load("affect_wide_short.rda")
+```
+
+```{r}
+head(wach_wide)
+```
+
+Zur Veranschaulichung der (Äquivalenz der) Modelle nutzen wir im Folgenden nur die ersten fünf Messzeitpunkte aus den Daten. Hierfür erstellen wir eine Kurzversion des long-Format Datensatzes `affect`.
+
+```{r}
+short <- affect[affect$MZP %in% c(1:5),]
+```
+
+# Variabilitätsmodelle
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2212532}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+## Schätzung via Mehrebenenanalyse (Nullmodell)
+
+Wir schätzen zunächst ein reines Variabilitätsmodell, d.h., ein Multilevel-Modell ohne Prädiktoren. Dieses zerlegt die personenspezifischen Werte in einen Gesamtmittelwert, die Abweichung des Personenmittels vom Gesamtmittelwert, sowie die Abweichung des messzeitspezifischen Werts einer Person von ihrem stabilen Personenmittelwert.
+
+
+```{r}
+nullmod <- lmer(wach ~  1 + (1|ID), short, REML=F)
+summary(nullmod)
+```
+
+### Berechnung der ICC
+
+```{r}
+ICC <- 0.7978 / (0.7978+1.1788)
+ICC
+```
+
+
+Die ICC beträgt 0.404, d.h. 40.4\% der Varianz sind auf die Schachtelung der Zeitpunkte in Personen zurückzuführen. In diesem Fall bedeutet dies, dass 40.4\% der inter-individuellen Unterschiede auf stabile Unterschiede zwischen den Personen zurückgehen. 
+
+Die ICC kann über `anova()` inferenzstatistisch überprüft werden. Die `ICCest()` Funktion berechnet die ICC inklusive einem Konfidenzintervall der ICC (Output verborgen). Die ICC ist bedeutsam von Null verschieden (s.u.).
+
+```{r}
+anova(lm(wach ~ ID, short))
+# ICCest(as.factor(short$ID), short$wach, alpha = .05, CI.type = "THD")
+```
+
+
+## Latent State-Trait Modell (single indicator)
+
+### Modellvariante I
+
+Diese restringierte Modellvariante des single-indicator LST Modells ist äquivalent zu dem Multilevel Nullmodell oben. Damit die Äquivalenz zum Mehrebenenmodell erreicht wird, müssen die folgenden Restriktionen in das Modell eingebaut werden:
+
+  - Die Faktorladungen sind über die Zeit alle gleich 1. Dies erzielt, dass ein stabiler Trait-Wert für jede Person geschätzt wird, welcher dem random intercept für die Person im Mehrebenenmodell entspricht.
+  - Die Intercepts der Items müssen alle auf Null gesetzt werden. Mittelwerte werden im Mehrebenenmodell rein über das Gesamt-Intercept $\gamma_{00}$ geschätzt. Personen können sich in ihrem mittleren Wert unterscheiden (random intercept $\nu_{0i}$ bzw. Wert auf dem latenten Trait Faktor), aber das mittlere Niveau wird über die Zeit hinweg als konstant angenommen.
+  - Die Residualvarianzen der Items müssen über die Zeit gleich gesetzt werden. Im Mehrebenenmodell gibt es nur eine einzige Residualvariable ($\epsilon_{it}$) welche eine einzige (über die Zeit konstante) Varianz geschätzt bekommt.
+
+```{r}
+mod1 <- ' 
+trait = ~ 1*w1 + 1*w2 + 1*w3 + 1*w4 + 1*w5    # faktorladungen alle = 1
+w1~~eps*w1                                    # residualvarianz gleich
+w2~~eps*w2                                    # residualvarianz gleich
+w3~~eps*w3                                    # residualvarianz gleich
+w4~~eps*w4                                    # residualvarianz gleich 
+w5~~eps*w5                                    # residualvarianz gleich
+
+w1 + w2 + w3 + w4 + w5  ~ 0*1                 # Interecepts der Items alle = 0
+trait ~ NA*0                                  # Trait Erwartungswert frei geschätzt (gamma_00)
+'
+
+fit1 <- sem(mod1, wach_wide, meanstructure = TRUE, estimator = "ML")
+```
+
+```{r}
+#| eval: false
+summary(fit1)
+```
+
+```
+...
+(Output shortened)
+...
+Latent Variables:
+                   Estimate  Std.Err  z-value  P(>|z|)
+  trait =~                                            
+    w1                1.000                           
+    w2                1.000                           
+    w3                1.000                           
+    w4                1.000                           
+    w5                1.000                           
+
+Intercepts:
+                   Estimate  Std.Err  z-value  P(>|z|)
+   .w1                0.000                           
+   .w2                0.000                           
+   .w3                0.000                           
+   .w4                0.000                           
+   .w5                0.000                           
+    trait             4.162    0.119   34.974    0.000
+
+Variances:
+                   Estimate  Std.Err  z-value  P(>|z|)
+   .w1       (eps)    1.179    0.098   12.083    0.000
+   .w2       (eps)    1.179    0.098   12.083    0.000
+   .w3       (eps)    1.179    0.098   12.083    0.000
+   .w4       (eps)    1.179    0.098   12.083    0.000
+   .w5       (eps)    1.179    0.098   12.083    0.000
+    trait             0.798    0.172    4.633    0.000
+```
+
+
+  - Der Erwartungswert des Trait Faktors wird auf 4.162 geschätzt. Dies entspricht dem geschätzten Wert von $\gamma_{00}$ im Mehrebenenmodell oben (siehe `Fixed effects` `(Intercept)`).
+  - Die Varianz des Trait Faktors wird auf 0.798 geschätzt. Dies entspricht der random intercept Varianz im Mehrebenenmodell (siehe `Random effects`  `ID (Intercept)`).
+  - Die Residualvarianz wird auf 1.179 geschätzt. Dies entspricht der Residualvarianz im Mehrebenenmodell (siehe `Random effects` `Residual`).
+  - Wir könnten hier den Stabilitätskoeffizienten berechnen. Dieser ist definiert als
+  
+  $$Stab(Y_{it})=\frac{Var(\xi_i)}{Var(Y_{it})}=\frac{0.798}{0.798+1.179}=0.404$$
+Da in diesem single-indicator Modell wahre zeitspezifische Varianz nicht vom Messfehler getrennt wird, kann die Stabilität nur auf Ebene der beobachteten Varianz berechnet werden (nicht Stabilität des messfehlerfreien True Scores) und entspricht hier somit der ICC des Mehrebenenmodells.
+
+### Äquivalenz der Modelle
+
+Dass die beiden Modelle (Mehrebenenmodell, restringiertes LST) zu den gleichen Parameterschätzwerten führen haben wir bereits gesehen. Wenn wir die loglikelihood der Modelle sowie den AIC betrachten, stellen wir fest, dass die Modelle tatsächlich datenäquivalent sind:
+
+```{r}
+logLik(fit1)
+logLik(nullmod)
+AIC(fit1, nullmod)
+```
+
+### Modell-Fit
+
+Die Schätzung als SEM in lavaan erlaubt es, die Annahmen des Modells zu überprüfen. Wir lassen uns den Modell-Fit des restringierten Modells ausgeben:
+
+```{r}
+fitMeasures(fit1, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr"))
+```
+
+Das Modell passt nicht gut auf die Daten (bzw.: ziemlich schlecht). Die oben erwähnten Annahmen (invariante Ladungen, Residualvarianzen, Intercepts) scheinen zu streng zu sein. Desweiteren kann der schlechte Fit auch dadurch zustande kommen, dass wir ignorieren, dass die Zeitpunkte eine zeitliche Ordnung aufweisen: Zeitpunkte nahe beieinander sind potentiell stärker korreliert als weiter voneinander entfernte Zeitpunkte; die bisherigen Modelle treffen die Annahme, dass die Korrelation über die Zeit konstant ist. Man könnte diese Annahmen bei der Schätzung des LST Modells via SEM in lavaan a) schrittweise über Modellvergleiche überprüfen, und b) ggf. lockern, sowie c) das Modell um autoregressive Effekte oder systematische Verläufe über die Zeit erweitern.
+
+# Wachstumskurvenmodelle
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2212533}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+Passender für die Modellierung der Wachheit über den Tagesverlauf könnte die Nutzung eines Wachstumskurvenmodells sein. So ist es nicht realistisch anzunehmen, dass die Wachheit der Personen über den Tag hinweg lediglich zufällige Schwankungen um einen personen-spezifischen konstanten Trait aufweisen. Realistischer ist eine zirkadiane Verlaufsform die die Tageszeit berücksichtigt. Um diese mit aufzunehmen starten wir zunächst mit einem linearen Wachstumskurvenmodell, welches wir dann in der nächsten Woche um mehr realistische zyklische Schwankungen erweitern. 
+
+Lineare Wachstumskurvenmodelle oder auch sogenannte Latent-Growth-Curve Modelle nehmen in ihrer einfachsten Form an, dass der Wert einer Person über den Verlauf der Zeit kontinuierlich zu- oder abnimmt. Jede Person kann dabei eine individuelle Ausprägung (Betrag und Vorzeichen) des Anstiegs (bzw. der Abnahme) aufweisen. 
+
+Wachstumskurvenmodelle können auf zwei verschiedene Arten und Weisen implementiert werden:
+  
+  1) Manifest (univariater HLM-Ansatz) als Mehrebenenmodell. Erlaubt keine Kontrolle des Messfehlers, jedoch einen flexiblen Umgang mit einer variierenden Anzahl von und variierenden Zeitabständen zwischen den MZPen.
+  2) Latent (multivariater SEM-Ansatz) als Strukturgleichungsmodell, idealerweise unter Kontrolle des Messfehlers.
+ 
+
+## 1) Manifest als Mehrebenenmodell
+
+Im Mehrebenenmodell kann lineares Wachstum durch die Aufnahme der Zeit als Prädiktorvariable modelliert werden. 
+
+Die Variable `time` kodiert in unserem Datensatz die (fortlaufende) Zeit seit Beginn der Messung der Daten. Indem wir die Zeit als Prädiktor aufnehmen, können wir sehen, ob mit dem Fortschreiten der Zeit um eine Einheit (hier: eine Stunde) eine Veränderung der Wachheit einhergeht.
+
+### Random Intercept Modell
+
+Wir nehmen zunächst an, dass das Wachstum für alle Personen gleich ausfällt (fixed effect).
+
+```{r}
+linear_RI <- lmer(wach ~ 1 + time + (1  | ID), REML = TRUE, data = short)
+summary(linear_RI)
+```
+
+Zu Zeitpunkt 0 erwarten wir im Mittel über alle Personen hinweg eine Ausprägung der Wachheit von $\gamma_{00}=3.926$. Dieses Intercept kann über Personen variieren, mit einer Varianz der random intercepts von $Var(\nu_{0i}=0.859)$. Mit jeder Stunde die der Tag fortschreitet erwarten wir, dass die Wachheit, im Mittel über alle Personen hinweg, um $\gamma_{10}=0.093$ Einheiten ansteigt.
+ 
+### Random Slopes Modell
+
+Wir erweitern das Modell, um inter-individuelle Unterschiede im Wachstum zu modellieren, indem wir einen random effect für die Prädiktorvariable Zeit (`time`) aufnehmen.
+
+```{r}
+linear_RS <- lmer(wach ~ 1 + time + (1 + time   | ID), REML = TRUE, data = short)
+summary(linear_RS)
+```
+
+```{r, eval = F}
+confint(linear_RS, method = "boot", n = 1000)
+```
+
+```
+                 2.5 %     97.5 %
+.sig01       1.20329111  1.8530404
+.sig02      -0.88180535 -0.5914311
+.sig03       0.25289171  0.4413981
+.sigma       0.79099274  0.9548111
+(Intercept)  3.51341149  4.2704921
+time         0.01202592  0.2122584
+```
+
+Die Slopes des Prädiktors `time` variieren über Personen mit einer Standardabweichung von 0.352 mit einem 95% Bootstrap-KI=[0.253; 0.441] welches nicht die Null überdeckt. Es scheinen inter-individuelle Unterschiede im Verlauf der Wachheit über den Tag hinweg vorzuliegen. Die mittleren 95% der personenspezifische Slopes liegen im Bereich zwischen $\gamma_{10} - 1.96*\sigma_{nu_{1i}}=0.11152 - 1.96*0.3524=-0.579$ und $\gamma_{10} + 1.96*\sigma_{nu_{1i}}=0.11152 + 1.96*0.3524=0.80$. Die Wachheit mit der die Personen in den Tag starten (Intercept; time = 0) hängen negativ mit ihrem Wachstum über die Zeit zusammen ($r=-0.77$), das heißt, Personen, die wacher in den Tag starten zeigen tendenziell eher einen geringeren Anstieg bzw. einen Abfall der Wachheit über den Tag hinweg, während Personen die weniger wach in den Tag starten tendenziell einen höheren Anstieg der Wachheit über den Tag aufweisen. Auch die Annahme eines linearen Anstiegs / Abfallls der Wachheit über den Tag ist nicht realistisch, wir heben diese in der nächsten Sitzung auf.
+
+
+### Modellvergleich 
+Wir können das random intercept über einen Devianzentest mit dem random slope Modell vergleichen:
+
+```{r}
+anova(linear_RI, linear_RS, refit = FALSE)
+```
+
+Das Modell welches keine inter-individuellen Unterschiede im Wachstum zulässt (fixed slope: linear_RI) passt signifikant schlechter auf die Daten (als das linear_RS Modell). Wir bevorzugen das Modell mit random slopes.
+Aber Achtung: Varianzen werden bei diesem Test auf Randwerte gesetzt (Varianz der Random Slopes kann theoretisch nicht negativ sein). Daher Nutzung der kritischen $\chi^2$- Werte nach Snijders & Bosker (2012) für $\alpha=0,05$:
+
+    - gegeben der Gesamtanzahl der random slopes im Modell:
+    - ein zufälliges Regressionsgewicht im Modell:  5.14
+    - zwei zufällige Regressionsgewichte im Modell: 7.05
+    - drei zufällige Regressionsgewichte im Modell: 8.76
+
+Der korrigierte kritische Werte von 5.14 wird deutlich überschritten. Auch AIC und BIC sprechen für das linear_RS Modell. 
+
+Wir plotten zur Veranschaulichung die Verläufe (einiger Personen) im random slopes Wachstumskurvenmodell (Code not shown):
+
+```{r}
+#| echo: false
+tmp <- data.frame(short[,c('ID','time','wach')],pre=predict(linear_RS))
+tmp <- tmp[tmp$ID%in%levels(tmp$ID)[c(1:3, 5:10,21:30)],]
+tmp_line <-  data.frame(time=0:5,pre=fixef(linear_RS)[1]+fixef(linear_RS)[2]*0:5,id='avg')
+ggplot(tmp,aes(x=time,y=pre,color=ID)) + geom_line() + geom_line(data=tmp_line,aes(y=pre),color='black',linetype=2)
+```
+
+## 2) Latent Growth Curve  (als Strukturgleichungsmodell)
+
+```{r}
+LGC <- ' 
+Int = ~ 1*w1 + 1*w2 + 1*w3 + 1*w4 + 1*w5      # Latent Intercept Factor
+Slo = ~ 0*w1 + 1*w2 + 2*w3 + 3*w4 + 4*w5      # Linear Slope Factor
+w1~~eps*w1                                    # residualvarianz gleich
+w2~~eps*w2                                    # residualvarianz gleich
+w3~~eps*w3                                    # residualvarianz gleich
+w4~~eps*w4                                    # residualvarianz gleich 
+w5~~eps*w5                                    # residualvarianz gleich
+
+w1 + w2 + w3 + w4 + w5  ~ 0*1                 # Interecepts der Items alle = 0
+Int ~ NA*0                                   # Int Erwartungswert frei geschätzt 
+Slo ~ NA*0                                   # Slo Erwartungswert frei geschätzt
+'
+
+fitLGC<-sem(LGC, wach_wide, meanstructure=TRUE,estimator="ML")
+```
+
+```{r}
+#| eval: false
+summary(fitLGC, standardize = TRUE)
+```
+
+```
+...
+(output shortened)
+...
+Latent Variables:
+                   Estimate  Std.Err  z-value  P(>|z|)   Std.lv  Std.all
+  Int =~                                                                
+    w1                1.000                               1.423    0.855
+    w2                1.000                               1.423    0.996
+    w3                1.000                               1.423    1.115
+    w4                1.000                               1.423    1.154
+    w5                1.000                               1.423    1.084
+  Slo =~                                                                
+    w1                0.000                               0.000    0.000
+    w2                1.000                               0.393    0.275
+    w3                2.000                               0.786    0.616
+    w4                3.000                               1.179    0.956
+    w5                4.000                               1.573    1.198
+
+Covariances:
+                   Estimate  Std.Err  z-value  P(>|z|)   Std.lv  Std.all
+  Int ~~                                                                
+    Slo              -0.440    0.113   -3.903    0.000   -0.786   -0.786
+
+Intercepts:
+                   Estimate  Std.Err  z-value  P(>|z|)   Std.lv  Std.all
+   .w1                0.000                               0.000    0.000
+   .w2                0.000                               0.000    0.000
+   .w3                0.000                               0.000    0.000
+   .w4                0.000                               0.000    0.000
+   .w5                0.000                               0.000    0.000
+    Int               3.881    0.184   21.093    0.000    2.727    2.727
+    Slo               0.140    0.056    2.508    0.012    0.357    0.357
+
+Variances:
+                   Estimate  Std.Err  z-value  P(>|z|)   Std.lv  Std.all
+   .w1       (eps)    0.743    0.071   10.464    0.000    0.743    0.268
+   .w2       (eps)    0.743    0.071   10.464    0.000    0.743    0.364
+   .w3       (eps)    0.743    0.071   10.464    0.000    0.743    0.456
+   .w4       (eps)    0.743    0.071   10.464    0.000    0.743    0.488
+   .w5       (eps)    0.743    0.071   10.464    0.000    0.743    0.431
+    Int               2.025    0.411    4.925    0.000    1.000    1.000
+    Slo               0.155    0.039    4.010    0.000    1.000    1.000
+
+```
+
+Die Ergebnisse weichen leicht von denen des Mehrebenenmodells ab. Dies liegt daran, dass wir in diesem die Zeitvariable `time` genutzt haben, welche Unterschiede in den Zeitabständen zwischen zwei Messungen über die Zeitpunkte sowie Personen hinweg berücksichtigt (siehe Exkurs). 
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2213129}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+Im wide-Format LGC Modell nutzen wir jedoch nur die Informationen zum Messzeitpunkt. Unterschiede in den Zeitabständen könnten unter der Hinzunahme von spezifischen Modellierungen der Ladungen (anstatt nur 1,2,3,4) berücksichtigt werden (dies ist jedoch komplizierter und machen wir hier nicht). Ein Vorteil des LGCs im SEM Kontext ist hingegen, dass a) wir mehrere Indikatoren nutzen und den Messfehler von genuin **latentem** Growth (auf Ebende von Faktoren) trennen könnten, b) wir dieses auf mehrere Konstrukte erweitern könnten (multivariat) (siehe Vorlesung).
+

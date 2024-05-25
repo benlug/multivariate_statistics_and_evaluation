@@ -1,0 +1,121 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: \chead{Musterlösung 1 - ANCOVA}
+---
+
+# Kausale Effektschätzung - ANCOVA
+
+## Aufgabe 1: Datensatz und Deskriptivstatistiken
+
+```{r}
+#| echo: false
+setwd(this.path::this.dir())
+load("../Datensätze/spf2.rda")
+```
+
+```{r}
+str(spf2)
+# Verteilung auf die Schulformen
+table(spf2$schule)
+# Unbedingter Mittelwert der Kompetenz `hören` 
+mean(spf2$hoeren)
+# Gruppenspezifische Kompetenz-Werte
+tapply(spf2$hoeren, spf2$schule, mean)
+# Gruppenspezifische Werte auf der Kovariate
+tapply(spf2$HISEI, spf2$schule, mean)
+```
+
+## Aufgabe 2: Prima Facie Effekt der Hörkompetenz
+
+```{r}
+## t-Test
+m1 <- lm(hoeren ~ schule, spf2)
+summary(m1)$coef
+```
+$\widehat{PFE}=80.52$
+
+## Aufgabe 3: Traditionelle ANCOVA
+
+```{r}
+#| warnings: false
+#| message: false
+# Zentrierung der Kovariate am Gesamtmittelwert
+library(jtools)
+spf2$HISEI_z <- center(data = spf2$HISEI)
+# trad. ANCOVA
+m2 <- lm(hoeren ~ HISEI_z + schule, spf2)
+summary(m2)$coef
+```
+
+## Aufgabe 4: Streudiagramm
+
+```{r}
+#| message: false
+library(sjPlot)
+plot_model(m2, type = "pred",
+           terms = c("HISEI_z", "schule"), 
+           show.data = TRUE, dot.size = 1, # graph. Parameter 
+           ci.lvl = NA) 
+```
+
+Effekt ist Abstand zwischen den Geraden ($\widehat{ATE}=\alpha_2=72.99$)
+
+## Aufgabe 5: Generalisierte ANCOVA
+
+```{r}
+m3 <- lm(hoeren ~ HISEI_z * schule, spf2)
+summary(m3)$coef
+plot_model(m3, type = "pred",
+           terms = c("HISEI_z", "schule"), 
+           show.data = TRUE, dot.size = 1, # graph. Parameter 
+           ci.lvl = NA) 
+```
+
+**ATE und ATT berechnen**  
+Für die Berechnung des ATT brauchen wir den Mittelwert der Kovariaten in der Treatmentgruppe ($E(Z\mid X=1)$). Für den ATE benutzen wir dass $E(Z)=0$, da wir unsere Kovariate am Gesamtmittelwert zentriert haben.
+
+```{r}  
+# Mittelwert der zentrierten Kovariaten in Treatmentgruppe
+mean(spf2$HISEI_z[spf2$schule==1])
+```
+  
+\begin{align*}
+  \widehat{ATE} &=\alpha_2=75.03\\
+  \widehat{ATT}_{X=1} &=\alpha_2+\alpha_3\cdot E(Z|X=1)\\
+  &=75.0287695+0.9649005\cdot 1.038332=76.03
+\end{align*}
+
+## Aufgabe 6: Bedingter Effekt
+
+Effekt bei minimalem sozioökonomischem Status:
+  
+```{r}
+# Minimaler soz. Status
+min(spf2$HISEI_z)
+```
+
+\begin{align*}
+  E[g_1(Z=-26.98)]&=\alpha_2+\alpha_3\cdot min(Z)\\
+  &=75.0287695 + 0.9649005\cdot -26.98398=48.99
+\end{align*}
+
+## Aufgabe 7: EffectLiteR
+
+```{r}
+#| message: false
+#| size: small
+#| warning: false
+library(EffectLiteR)                # Paket laden
+# Modell ohne Kovariate
+effectLite(y = "hoeren", x = "schule", control = "0", data = spf2)
+# trad. ANCOVA
+effectLite(y = "hoeren", x = "schule", control = "0", data = spf2,
+           z = "HISEI_z", interactions = "none")
+# gen. ANCOVA
+effectLite(y = "hoeren", x = "schule", control = "0", data = spf2,
+           z = "HISEI_z")
+```
+

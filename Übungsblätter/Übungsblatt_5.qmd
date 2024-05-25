@@ -1,0 +1,43 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: |
+            \chead{Übungsblatt 5 - Längsschnittanalysen I}
+            \fancyfoot[CO]{J. Holtmann, B. Lugauer, K. Koslowski | Multivariate Statistik \& Evaluation | SS 23}
+---
+
+# Aufgaben: Längsschnittanalaysen und Veränderungsmessung I
+
+## Aufgabe 1 (Variabilitätsmodell)
+
+Laden Sie den Datensatz `affect.rda`. Überprüfen Sie mit einer ANOVA die statistische Bedeutsamkeit der Clusterung für die gute vs. schlechte Stimmung (Variable `gut`). Schätzen Sie im Anschluss das entsprechende Nullmodell mit der `lmer()`-Funktion aus dem `lme4` Paket. Berechnen Sie die ICC aus den Varianzkomponenten und interpretieren Sie diese inhaltlich.
+
+## Aufgabe 2 (Growth Curve Mehrebenenmodell)
+
+Erstellen Sie ein Random-Intercept Modell, in dem gute Stimmung linear von der Tageszeit vorhergesagt wird. Das Ausgangsniveau der Stimmung darf dabei über Personen variieren. Gibt es einen (von Null verschiedenen) linearen Trend der guten Stimmung über alle Personen hinweg?
+
+Erweitern Sie nun das lineare Modell für die gute Stimmung, um zu untersuchen, ob Varianz in den linearen Steigunskoeffizienten (inter-individuelle Unterschiede) vorhanden ist (Random-Slope Modell). Wie sind die random effects miteinander korreliert? Was bedeutet diese Korrelation inhaltlich?
+
+## Aufgabe 3 (Latent Growth Curve Modell)
+
+Betrachten Sie nochmals die Übungsaufgaben zur Sitzung 13 SEM des Wintersemesters. Laden Sie den Datensatz `stimmung.rda `(Achtung: Objektname des data.frame ist auch `affect`, so wie bei dem anderen Datensatz). 
+
+Spezifizeren Sie ein Single-Indicator Latent Growth Curve Modell für die Stimmungsvariablen `stim1_1` - `stim1_4.` Lassen Sie die Erwartungswerte des Intercept und des Slope Faktors frei schätzen und setzen Sie alle Intercepts der Items auf Null. Betrachten Sie den Fit des Modells und interpretieren Sie die Modellergebnisse.
+
+## Zusatzaufgabe 1 LGC (optional)
+
+Spezifizieren Sie das Latent State Modell für die Stimmung (Items `stim1_t` und `stim6_t`) (ohne indikatorspezifischem Residualfaktor) aus dem Skript der Übung 13 (SEM) aus dem Wintersemester (Code siehe Unterlagen des WS --> Sie können diesen copy pasten).
+
+Erweitern Sie nun das Modell so, dass Sie ein lineares Growth Modell für die *latenten*
+State Variablen `stim1` - `stim4` erstellen. Achten Sie darauf, dass Sie die Intercepts für die Items `stim1_t` auf Null fixieren und die der Items `stim6_t` über die Zeit konstant setzen. Schätzen Sie die Erwartungswerte des Latent Intercept Faktors und des Latent Slope Faktors frei.
+
+Betrachten Sie den Output und interpretieren Sie das Ergebnis.
+
+## Zusatzaufgabe 2 LGC (optional)
+
+Das Modell aus der obigen Zusatzaufgabe passt nicht gut auf die Daten, was sich wieder, wie im Skript des WS bereits festgestellt und ausgeführt, durch indikator-spezifische stabile Effekte erklären lässt.Wir können auch hier den indikatorspezifischen Residualfaktor für das zweite Item wieder hinzunehmen. Wir müssen darauf achten, dass dieser Faktor (ITR im Modell) nicht mit den anderen Faktoren im Modell korrelieren darf. Erweitern Sie das Modell aus der obigen Zusatzaufgabe entsprechend. Nutzen Sie hierfür das Skript 13 SEM aus dem WS als Hilfe.
+
+
+

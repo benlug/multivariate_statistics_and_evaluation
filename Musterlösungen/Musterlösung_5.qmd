@@ -1,0 +1,234 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: |
+            \chead{Musterlösung 5 - Längsschnittanalysen I}
+            \fancyfoot[CO]{J. Holtmann, B. Lugauer, K. Koslowski | Multivariate Statistik \& Evaluation | SS 23}
+---
+
+```{r}
+#| echo: false
+#| message: false
+setwd(this.path::this.dir())
+load("../Datensätze/affect.rda")
+load("../Datensätze/affect_wide_short.rda")
+source("_functions/help_console.R")
+library(ggplot2)
+library(lme4)
+```
+
+# Musterlösung: Längsschnittanalaysen und Veränderungsmessung I
+
+## Aufgabe 1 (Variabilitätsmodell)
+
+Als Vorbereitung müssen das `lme4`-Paket und der `affect`-Datensatz geladen werden. 
+
+```{r}
+#| eval: false
+# setwd("myworkindirectory")
+load("affect.rda")
+library(lme4)
+```
+
+Überprüfen Sie mit einer ANOVA die statistische Bedeutsamkeit der Clusterung für die gute vs. schlechte Stimmung (Variable `gut`):
+```{r}
+anova(lm(gut ~ ID, affect))
+```
+
+Schätzen Sie das entsprechende Nullmodell mit der `lmer()`-Funktion:
+```{r}
+null <-  lmer(gut ~ 1 + (1 | ID), affect)
+summary(null)
+```
+
+Berechnen Sie die ICC aus den Varianzkomponenten:
+```{r}
+var.u0i <- unlist(VarCorr(null))
+var.rti <- sigma(null)^2
+var.u0i / (var.u0i + var.rti)
+```
+
+## Aufgabe 2 (Growth Curve Mehrebenenmodell)
+
+Erstellen Sie ein Modell, in dem gute Stimmung linear von der Tageszeit  
+vorhergesagt wird. Das Ausgangsniveau der Stimmung darf dabei über Personen variieren. Gibt es einen (von Null verschiedenen) mittleren linearen Trend der guten Stimmung über alle Personen hinweg?
+
+```{r}
+line <-  lmer(gut ~ 1 + time + (1 | ID), affect)
+summary(line)
+```
+
+Linearer Trend von Null verschieden?
+
+```{r}
+test <- lmerTest::lmer(gut ~ 1 + time + (1 | ID), affect)
+summary(test)$coef
+
+confint(line, method = "boot", n = 1000)
+```
+Ja, t(725.3) = 3.838, p < 0.05. 95% CI von `time` überdeckt nicht die Null (CI-Grenzen können bei Ihnen aufgrund des Zufallsprozesses leicht abweichen).
+
+Erweitern Sie das lineare Modell für die gute Stimmung, um zu untersuchen, ob Varianz in den linearen Steigunskoeffizienten vorhanden ist.
+```{r}
+line_rs <-  lmer(gut ~ 1 + time  + (1 + time | ID), affect)
+summary(line_rs)
+confint(line_rs, method = "boot", n = 1000)
+anova(line_rs, line, refit = FALSE)
+```
+
+Ja, die Standardabweichung der random slope beträgt 0.08403 mit einem CI welches nicht die Null überdeckt (Grenzen können leicht variieren). Der LRT zeigt an, dass das restriktivere Modell (ohne random slopes) signifikant schlechter auf die Daten passt als das Modell mit random slopes.
+
+Wie sind die random effects miteinander korreliert? Was bedeutet diese Korrelation inhaltlich?
+```{r}
+summary(line_rs)$var
+```
+Korrelation von -0.73 -> Höhere Intercepts gehen mit niedrigeren Steigungen einher 
+
+## Aufgabe 3 (Latent Growth Curve Modell)
+
+Betrachten Sie nochmals die Übungsaufgaben zur Sitzung 13 SEM des Wintersemesters.
+Laden Sie den Datensatz `stimmung.rda` (Achtung: Objektname auch `affect` so wie bei dem anderen Datensatz). 
+
+```{r}
+#| echo: false
+load("../Datensätze/stimmung.rda")
+```
+
+```{r}
+#| eval: false
+load("stimmung.rda")
+```
+
+```{r}
+str(affect)
+```
+
+Spezifizeren Sie ein Single-Indicator Latent Growth Curve Modell für die Stimmungsvariablen stim1. Lassen Sie die Erwartungswerte des Intercept und des Slope Faktors frei schätzen und setzen Sie alle Intercepts der Items auf Null. 
+
+```{r}
+lgc1 <- "
+Int =~ 1*stim1_1 + 1*stim1_2 + 1*stim1_3 + 1*stim1_4
+Slo =~ 0*stim1_1 + 1*stim1_2 + 2*stim1_3 + 3*stim1_4
+
+Int ~ NA*1
+Slo ~ NA*1
+
+stim1_1 ~ 0*1
+stim1_2 ~ 0*1
+stim1_3 ~ 0*1
+stim1_4 ~ 0*1
+"
+```
+
+
+```{r}
+library(lavaan)
+lgc_fit1 <- sem(lgc1, data = affect, meanstructure = TRUE)
+```
+
+Betrachten Sie den Fit des Modells und interpretieren Sie die Modellergebnisse.
+
+```{r}
+fitmeasures(lgc_fit1)[c("chisq", "df", "pvalue", "srmr", "rmsea", "cfi", "tli")]
+summary(lgc_fit1, standardize = TRUE)
+```
+
+Das Modell passt sehr gut auf die Daten. Zum ersten Zeitpunkt zeigen die Personen eine mittlere Stimmung von 3.165, welche über die Zeit hinweg im Mittel ansteigt (0.148 Einheiten mit jedem Messzeitpunkt (ca. eine Stunde)). Es bestehen inter-individuelle Unterschiede im Ausgangswert (Varianz des Intercept Faktors). Die Varianz des Slope Faktors ist nicht signifikant, sodass inter-individuelle Unterschiede im Wachstum ggf. nicht modelliert werden müssten. Intercept und Slope korrelieren zu -0.292 (ein höherer Ausgangswert geht einher mit geringerem Wachstum), jedoch nicht signifikant. Wir betrachten aufgrund der Ergebnisse noch ein reines Variabilitätsmodell:
+
+Modell ohne Slope: Latent State Trait Modell (single-Indicator)
+```{r}
+lst1 <- "
+Int =~ 1*stim1_1 + 1*stim1_2 + 1*stim1_3 + 1*stim1_4
+"
+```
+
+```{r}
+lst_fit <- sem(lst1, data = affect, meanstructure = TRUE)
+fitmeasures(lst_fit)[c("chisq", "df", "pvalue", "srmr", "rmsea", "cfi", "tli")]
+summary(lst_fit, standardize = TRUE)
+```
+
+- Das LST Modell mit einem zeitstabilen Faktor und freien Item-Intercepts über die Zeit passt sehr gut auf die Daten.
+- Growth Faktor wird nicht benötigt (keine inter-individuellen Unterschiede im Wachstum), aber Mittelwerte der Stimmung steigen über die Zeit hinweg leicht an (--> Item Intercepts; bzw. mittlerer Growth))
+
+## Zusatzaufgabe 1 LGC (optional)
+
+Spezifizieren Sie das Latent State Modell für die Stimmung (Items stim1 und stim6) (ohne indikatorspezifischem Residualfaktor) aus dem Skript der Übung 13 (SEM) aus dem Wintersemester (Code siehe Unterlagen des WS --> copy pasten)
+
+```{r}
+ls <- "
+stim1 =~ 1*stim1_1 + lam*stim6_1
+stim2 =~ 1*stim1_2 + lam*stim6_2
+stim3 =~ 1*stim1_3 + lam*stim6_3
+stim4 =~ 1*stim1_4 + lam*stim6_4
+"
+```
+
+Erweitern Sie nun das Modell so, dass Sie ein lineares Growth Modell für die *latenten* Variablen `stim1` - `stim4` erstellen. Achten Sie darauf, dass Sie die Intercepts für die Items `stim1_t` auf Null fixieren und die der Items `stim6_t` über die Zeit konstant setzen. Schätzen Sie die Erwartungswerte des Latent Intercept Faktors und des Latent Slope Faktors frei.
+
+```{r}
+lgc2 <- "
+stim1 =~ 1*stim1_1 + lam*stim6_1
+stim2 =~ 1*stim1_2 + lam*stim6_2
+stim3 =~ 1*stim1_3 + lam*stim6_3
+stim4 =~ 1*stim1_4 + lam*stim6_4
+
+Int =~ 1*stim1 + 1*stim2 + 1*stim3 + 1*stim4
+Slo =~ 0*stim1 + 1*stim2 + 2*stim3 + 3*stim4
+
+stim1_1 ~ 0*1
+stim1_2 ~ 0*1
+stim1_3 ~ 0*1
+stim1_4 ~ 0*1
+stim6_1 ~ b*1
+stim6_2 ~ b*1
+stim6_3 ~ b*1
+stim6_4 ~ b*1
+
+Int ~ NA*1
+Slo ~ NA*1
+"
+
+lgc_fit2 <- sem(lgc2, data = affect, meanstructure = TRUE)
+fitmeasures(lgc_fit2)[c("chisq", "df", "pvalue", "srmr", "rmsea", "cfi", "tli")]
+summary(lgc_fit2, standardize = TRUE)
+```
+
+Die Ergebnisse des Growth beziehen sich nun auf messfehlerfreie latente Variablen. Wir erhalten zudem Schätzwerte für die Messfehlervarianzen. Die mittleren Werte des latenten Intercept und Growth sowie auch ihre Varianzen sind ähnlich wie beim single-Indikator Modell (s. oben), die Varianz des random Slopes ist nun sign. Das Modell passt nicht gut auf die Daten, was sich wieder, wie im Skript des WS bereits festgestellt und ausgeführt, durch indikator-spezifische stabile Effekte erklären lässt.
+Wir können auch hier den indikatorspezifischen Residualfaktor für das zweite Item wieder hinzunehmen. Wir müssen darauf achten, dass dieser Faktor (ITR im Modell) nicht mit den anderen Faktoren im Modell korrelieren darf.
+
+## Zusatzaufgabe 2 LGC (optional)
+
+```{r}
+lgc3 <- "
+stim1 =~ 1*stim1_1 + lam*stim6_1
+stim2 =~ 1*stim1_2 + lam*stim6_2
+stim3 =~ 1*stim1_3 + lam*stim6_3
+stim4 =~ 1*stim1_4 + lam*stim6_4
+
+Int =~ 1*stim1 + 1*stim2 + 1*stim3 + 1*stim4
+Slo =~ 0*stim1 + 1*stim2 + 2*stim3 + 3*stim4
+
+stim1_1 ~ 0*1
+stim1_2 ~ 0*1
+stim1_3 ~ 0*1
+stim1_4 ~ 0*1
+stim6_1 ~ b*1
+stim6_2 ~ b*1
+stim6_3 ~ b*1
+stim6_4 ~ b*1
+
+Int ~ NA*1
+Slo ~ NA*1
+
+ITR =~ 1*stim6_1 + 1*stim6_2 + 1*stim6_3 + 1*stim6_4
+ITR ~~ 0*stim1 + 0*stim2 + 0*stim3 + 0*stim4 + 0*Int + 0*Slo
+"
+
+lgc_fit3 <- sem(lgc3, data = affect, meanstructure = TRUE)
+fitmeasures(lgc_fit3)[c("chisq", "df", "pvalue", "srmr", "rmsea", "cfi", "tli")]
+```
+
+

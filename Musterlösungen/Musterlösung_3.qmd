@@ -1,0 +1,93 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: \chead{Musterlösung 3 - Propensity Score Methods I}
+        
+geometry:
+  - marginparsep = 0.3in
+  - marginparwidth = 0in
+  - left = 0.85in
+  - right = 0.85in
+---
+
+# Kausale Effektschätzung - Propensity Score Methods I
+
+## Aufgaben
+
+```{r}
+#| echo: false
+setwd(this.path::this.dir())
+load("../Datensätze/training_dat.RData")
+```
+
+Der Datensatz `training_dat.RData` enthält simulierte Daten welche sich an die Studie von Pohl et al. (2009) anlehnen (Achtung: Effekte können abweichen). Für eine Englisch-Trainingsgruppe (`group == 1`) dient eine Mathe- Trainingsgruppe als Kontrollgruppe (`group == 0`). Die abhängige Variable ist das Ergebnis eines Englisch-Tests (`eng_post`). 
+
+1. Legen Sie zur Replizierbarkeit Ihrer Ergebnisse den Random Seed auf 12345 fest mit folgendem Befehl: `set.seed(12345)`.
+  
+```{r}
+set.seed(12345)
+```
+
+2. Führen Sie mit `matchit()` ein Propensity Score Matching der Teilnehmer*innen durch. Nehmen Sie in Ihr Zuordnungsmodell das Geschlecht (`sex`), die Vorliebe für Mathe (`matVL`) und den Englisch-Vortest (`eng_pre`) mit einfachen additiven Effekten (keine Interaktionen) auf. Nutzen Sie als Matching-Prozedur den Nearest Neighbor Approach.
+  
+```{r}
+library(MatchIt)
+m1 <- matchit(group ~ sex + matVL + eng_pre, data = dat,
+              distance = "glm", 
+              link = "logit", 
+              method = "nearest")
+m1
+```
+
+3. Überprüfen Sie mit deskriptiven Statistiken und Plots, ob es Fälle gibt, die außerhalb der *Region of Common Support* liegen.
+  
+```{r}
+plot(m1, type = "jitter", interactive = FALSE)
+```
+
+Ja, es gibt einige Personen in der Treatmentgruppe mit sehr hohem oder geringen PS, die außerhalb der *Region of Common Support* liegen und gematcht wurden. 
+
+Ausschließen könnte man diese Personen wie folgt (war aber nicht gefordert):
+
+```{r}
+set.seed(12345)
+m1b <- matchit(group ~ sex + matVL + eng_pre, data = dat,
+              distance = "glm", link = "logit", method = "nearest",
+              discard = "both")
+m1b
+plot(m1b, type = "jitter", interactive = FALSE)
+```
+
+4. Wie schätzen Sie die Balance der Gruppen auf den Kovariaten nach dem Matching ein? Achten Sie dabei besonders auf die Richtlinien für die standardisierten Mittelwertsunterschiede.
+
+```{r}
+round(summary(m1, standardize = TRUE)$sum.matched,
+      digits = 3)
+```
+
+Die standardisierten Mittelwertsdifferenzen sind auf dem PS und allen Kovariaten (bis auf `sex` mit `r round(summary(m1, standardize = TRUE)$sum.matched[2,3], 2)`) deutlich über den empfohlenen Absolut-Werten von 0.1 bzw 0.25. 
+
+```{r}
+plot(m1, type = "QQ")
+```
+
+Die Verteilung von `eng_pre` scheint sich kaum verbessert zu haben durch das Matching. Die Balance auf den Kovariaten ist nicht zufriedenstellend. 
+
+5. Nehmen Sie in das Propensity-Score-Modell auch alle Zweifach-Interaktionen zwischen den Kovariaten auf. Kann mithilfe dieses komplexeren Modells eine bessere Balance zwischen den Gruppen hergestellt werden?
+
+```{r}
+set.seed(12345)
+m2 <- matchit(group ~ sex + matVL + eng_pre + sex*matVL + sex*eng_pre + matVL*eng_pre, 
+              data = dat, distance = "glm", link = "logit", method = "nearest",)
+```
+```{r, eval=F}
+summary(m2, standardize = TRUE)$sum.matched
+```
+```{r, echo=F}
+round(summary(m2, standardize = TRUE)$sum.matched[, 1:4],
+      digits = 3)
+```
+
+Nein, keine deutliche Verbesserung. Bezüglich des PS eher schlimmer als vorher. Das Ausschließen (s. o.) wäre nützlicher für die Balance, allerdings hat man dann nur noch 40 Personen pro Gruppe. 

@@ -1,0 +1,31 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: \chead{Übungsblatt 2 - Matching}
+---
+
+# Kausale Effektschätzung - Matching
+
+## Aufgaben
+
+Der Datensatz `training_dat.rda` enthält simulierte Daten, die an die Studie von Pohl et al. (2009) angelehnt sind. Für eine Englisch-Trainingsgruppe (`english`) dient eine Mathe-Trainingsgruppe als Kontrollgruppe (1 = "Englischtraining"; 0 = "Mathetraining"). Die abhängige Variable ist das Ergebnis eines Englischtests (`eng_post`).
+
+1. Öffnen Sie den Datensatz und lassen Sie sich die Deskriptivstatistiken ausgeben.
+
+2. Berechnen Sie den einfachen Mittelwertsunterschied zwischen den Gruppen im Englischtest.
+
+3. Erstellen Sie eine exakt gematchte Kontrollgruppe auf allen Kovariaten: Geschlecht (`sex`), Vorliebe für Mathe (`matVL`), Englisch-Vortest (`eng_pre`).
+
+4. Wie viele Personen konnten gematched werden? Wie viele Subklassen wurden erstellt? Konnte die Unterschiedlichkeit verringert werden?
+
+5. Schätzen Sie den ATE und ATT anhand der exakt gematchten Personen.
+
+5. Erstellen Sie eine gematchte Kontrollgruppe nach der Nearest Neighbor Methode und berücksichtigen Sie auch hier alle Kovariaten. Wählen Sie die Mahalanobis-Distanz, ein Matchingverhältnis von 1:1 und ein Verfahren ohne Zurücklegen.  
+Um vergleichbare Ergebnisse zu erhalten, setzen Sie zuvor den Startwert auf 10 fest mit `set.seed(10)`.
+
+6. Wie viele Personen konnten gematched werden? Konnte die Unterschiedlichkeit verringert werden? 
+
+5. Schätzen Sie in diesem Modell den ATE und ATT.
+

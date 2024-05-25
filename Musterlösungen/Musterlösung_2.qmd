@@ -1,0 +1,114 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: \chead{Musterlösung 2 - Matching}
+---
+
+# Kausale Effektschätzung - Matching
+
+## Aufgabe 1: Datensatz und Deskriptivstatistiken
+
+```{r}
+#| echo: false
+setwd(this.path::this.dir())
+load("../Datensätze/training_dat.RData")
+```
+
+```{r}
+#| warning: false
+str(dat)
+summary(dat)
+# Gruppenspezifische Mittelwerte
+library(psych)
+describeBy(dat, group = dat$group)
+```
+
+## Aufgabe 2: Prima Facie Effekt
+
+```{r}
+# t-Test/einfache Regression
+m1 <- lm(eng_post ~ group, data = dat)
+summary(m1)$coef
+```
+
+Negativer Effekt des Englischkurses: Teilnehmende des Englischtrainings haben im Mittel ein geringeres Ergebnis (PFE = $-0.085$) im Englisch-Test als die Teilnehmenden des Mathekurses.
+
+## Aufgabe 3: Exaktes Matching
+
+```{r}
+#| warning: false
+library(MatchIt)
+exakt <- matchit(group ~ sex + eng_pre + matVL, 
+                 method = "exact",
+                 data = dat)
+```
+
+## Aufgabe 4: Personen und Subklassen
+
+```{r}
+exakt
+exdat <- match.data(exakt)
+str(exdat)
+summary(exakt, un = F)
+```
+
+Es wurden 16 Subklassen mit gleichen Ausprägungen auf den Kovariaten gebildet. In diesen wurden insgesamt 25 Personen der Kontrollbedingung (hier: Mathe) und 22 aus der Treatmentbedingung (Englisch) gematched. Nicht gematched wurden 30 bzw. 26 Personen.
+  
+Die Frage nach der Verringerung der Unterschiedlichkeit ist beim exakten Matching in gewisser Weise überflüssig: Die Unterschiedlichkeit in den Kovariaten ist natürlich komplett eliminiert, da exakt gematcht wurde. Das heißt, die Gruppen unterscheiden sich nicht mehr auf den Kovariaten.
+
+## Aufgabe 5: Effektschätzung
+
+```{r}
+exdat <- match.data(exakt)
+agg <- aggregate(eng_post ~ subclass + group, data = exdat, mean)
+wide <- reshape(agg, direction = "wide", sep = "_", idvar = "subclass", timevar = "group")
+exdat <- merge(exdat, wide)
+# Schätzung des ATE
+mean(exdat$eng_post_1 - exdat$eng_post_0)
+# Schätzung des ATT
+tg <- exdat[exdat$group==1, ] # Teildatensatz Treatmentgruppe
+mean(tg$eng_post_1 - tg$eng_post_0)
+```
+
+\begin{align*}
+  \widehat{ATE} &=-0.097\\
+  \widehat{ATT} &=-0.104
+\end{align*}
+
+## Aufgabe 6: Nearest Neighbor Matching
+
+```{r}
+set.seed(10)
+near <- matchit(group ~ sex + eng_pre + matVL, data = dat,
+                method = "nearest", distance = "mahalanobis",
+                ratio = 1, replace = FALSE)
+```
+
+## Aufgabe 7: Beurteilung der Balance
+
+```{r}
+summary(near, standardize = TRUE)
+```
+
+Die Unterschiede der Besetzung auf der Geschlechtsvariable sind um rund 
+20% reduziert worden.  
+Unterschiede auf dem Englisch-Vortest sind um rund 11% reduziert worden und betragen im Mittel noch 0.47 Standardabweichungen (wobei die Kontrollgruppe höhere Vortestwerte hat).  
+Die ungleiche Verteilung in der Vorliebe für Mathe wurde um rund 15% reduziert, die Vorliebe ist aber nach wie vor höher in der Treatmentgruppe: Rund 35% der Treatmentgruppen-Personen geben eine Vorliebe an, während es in der Kontrollgruppe nur ca. 21% sind.  
+  
+## Aufgabe 8: Effektschätzung
+
+```{r}
+neardat <- match.data(near)
+# Durch 1:1 Matching ohne Zurücklegen entspricht der Unterschied in 
+# Mittelwerten dem  mittleren Unterschied über Personen. Daher einfache
+# Mittelwertsdifferenz z.B. über `lm()` berechenbar:
+lm(eng_post ~ group, data = neardat)
+```
+
+$\widehat{ATE}=\widehat{ATT}=$`r round(coef(lm(eng_post ~ group, data = neardat))[2],3)`
+  
+
+
+

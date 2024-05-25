@@ -1,0 +1,25 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: \chead{Übungsblatt 3 - Propensity Score Methods I}
+---
+
+# Kausale Effektschätzung - Propensity Score Methods I
+
+## Aufgaben
+
+Der Datensatz `training_dat.RData` (Objektname: `dat`) enthält simulierte Daten welche sich an die Studie von Pohl et al. (2009) anlehnen (Achtung: Effekte können abweichen). Für eine Englisch-Trainingsgruppe (`group == 1`) dient eine Mathe- Trainingsgruppe als Kontrollgruppe (`group == 0`). Die abhängige Variable ist das Ergebnis eines Englisch-Tests (`eng_post`). 
+
+1. Legen Sie zur Replizierbarkeit Ihrer Ergebnisse den Random Seed auf 12345 fest mit folgendem Befehl: `set.seed(12345)`.
+
+2. Führen Sie mit `matchit()` ein Propensity Score Matching der Teilnehmer*innen durch. Nehmen Sie in Ihr Zuordnungsmodell das Geschlecht (`sex`), die Vorliebe für Mathe (`matVL`) und den Englisch-Vortest (`eng_pre`) mit einfachen additiven Effekten (keine Interaktionen) auf. Nutzen Sie als Matching-Prozedur den Nearest Neighbor Approach.
+
+3. Überprüfen Sie mit deskriptiven Statistiken und Plots, ob es Fälle gibt, die außerhalb der *Region of Common Support* liegen.
+  
+4. Wie schätzen Sie die Balance der Gruppen auf den Kovariaten nach dem Matching ein? Achten Sie dabei besonders auf die Richtlinien für die standardisierten Mittelwertsunterschiede.
+  
+5. Nehmen Sie in das Propensity-Score-Modell auch alle Zweifach-Interaktionen zwischen den Kovariaten auf. Kann mithilfe dieses komplexeren Modells eine bessere Balance zwischen den Gruppen hergestellt werden?
+  
+6. Zusatzaufgabe: Nutzen Sie die Hilfe-Funktion zu `MatchIt` um herauszufinden, wie Sie Personen ausßerhalb des Common Supports in einer spezifischen Gruppe (Treatment oder Kontroll) ausschließen können. Probieren Sie verschiedene Varianten aus und beurteilen Sie, ob der Ausschluss von Personen die Balance verbessert.

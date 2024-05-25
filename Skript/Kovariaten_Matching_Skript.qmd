@@ -1,0 +1,377 @@
+---
+toc: true
+toc-title: "Inhaltsverzeichnis"
+toc-depth: 3
+number-sections: true
+
+urlcolor: blue
+linkcolor: magenta
+
+callout-icon: false
+
+author: "Benedikt Lugauer"
+
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/packages.tex
+        - text: \chead{Kausale Effektschätzung in R - Matching}
+        
+geometry:
+  - marginparsep = 0.5in
+  - marginparwidth = 0in
+---
+
+# Kovariatenmatching
+
+Im folgenden werden wir die Schätzung kausaler Effekte nach Kovariatenmatching betrachten. Wir betrachten zwei Methoden des Kovariatenmatchings: exaktes Matching und Nearest Neighbor Matching.
+
+## Lernziele und Vorgehen  
+
+Sie können Kovariatenmatching mithilfe des Pakets `MatchIt` durchführen, das Ergebnis des Matchings beurteilen, auf Basis der gematchten Stichproben Schätzer für kausale Effekte berechnen und diese interpretieren.
+
+Wir werden dafür wie folgt vorgehen:
+
+::: {.callout-note}
+## **Lernziele und Vorgehen** 
+  1. Deskriptive Datenanalyse
+  2. Kovariatenmatching mit `MatchIt`
+  2. Exaktes Matching
+     a) Durchführung
+     b) Imputierte Potential Outcomes
+     c) Effektschätzung
+  3. Nearest Neighbor Matching
+     a) Durchführung
+     c) Effektschätzung
+:::
+
+## Vorbereitung 
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2201127}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+```{r}
+#| echo: FALSE
+setwd(this.path::this.dir())
+```
+
+```{r}
+#| echo: FALSE
+#| message: FALSE
+source("_functions/help_console.R")
+```
+
+Wir benötigen in dieser Sitzung die folgenden Pakete.
+
+```{r}
+#| message: false
+if (!require("MatchIt")) install.packages("MatchIt")
+if (!require("psych")) install.packages("psych")
+if (!require("ggplot2")) install.packages("ggplot2")
+```
+
+Wir arbeiten mit dem Datensatz `bdi_data.rda`. Arbeitsverzeichnis setzen und Datensatz öffnen:
+
+```{r}
+#| eval: false
+setwd("C:/Users/me/myworkingdirectory")
+load("bdi_data.rda")
+```
+
+```{r}
+#| echo: false
+load("../Datensätze/bdi_data.rda")
+```
+
+Der Datensatz `bdi_data.rda` enthält die Daten von DepressionspatientInnen einer Hochschulambulanz (fiktiver Datensatz!). Zusätzlich zu ihrer Therapie erhalten einige PatientInnen eine achtsamkeitsbasierte Intervention (`group=1`). PatientInnen in der Kontrollgruppe (`group=0`) erhielten nur die Standardtherapie. Vor und nach der Intervention wird der BDI (*Beck Depression Inventory*) erhoben (`bdi1`, `bdi2`). Als Outcome soll die Depression nach der Intervention (`bdi2`) untersucht werden. Die Depressionswerte vor der Intervention (`bdi1`) sollen als Kovariante dienen. Als weitere Kovariaten wurden die folgenden Variablen erhoben:  
+
+- Alter (`age`)
+- kognitive Leistungsfähigkeit (`cogn`)
+- Anzahl bisheriger Therapiesitzungen (`sess`)
+- Vorliegen einer Substanzabhängigkeit (`addic`)
+
+```{r}
+str(bdi_data)
+```
+
+## Deskriptiver Vergleich der Gruppen
+
+Mithilfe des Befehls `describeBy()` aus dem Paket `psych()` lassen wir uns gruppenspezifische Kennwerte für unsere Kovariaten ausgeben:
+
+```{r}
+#| warning: false
+library(psych)
+describeBy(bdi_data, group = bdi_data$group)
+``` 
+
+Wir stellen fest, dass sich die beiden Gruppen hinsichtlich des Durchschnitts der Outcome-Variable `bdi2` kaum unterscheiden. Sie unterscheiden sich jedoch deutlich in allen Kovariaten, mit Ausnahme der Variable `addic`. Insbesondere ist auffällig, dass die durchschnittliche Depression **vor** der Intervention in der Kontrollgruppe deutlich niedriger ist als in der Behandlungsgruppe. Diese Variable sollte daher bei einer Schätzung des kausalen Effekts unbedingt als Kovariate berücksichtigt werden.
+
+### Exkurs: Grafische Veranschaulichung  
+
+Zusätzlich können wir die Verteilungen der Kovariaten in den beiden Gruppen graphisch darstellen, z.B. mit dem `ggplot()`-Befehl aus dem Paket `ggplot2`. Hierfür muss die Gruppenvariable `group` als Faktor gespeichert sein. Da wir die Variable später als numerische Variable im Datensatz benötigen, speichern wir unseren Datensatz zunächst unter einem anderen Namen:
+
+```{r}
+#| warning: false
+#| message: false
+# Lade Paket `ggplot2`
+library(ggplot2)
+# Abspeichern des Datensatzes unter anderem Namen 
+plot_data <- bdi_data
+# Konvertierung der Variable `group` in einen Faktor
+plot_data$group <- as.factor(plot_data$group) 
+# Plotten der Verteilung einer Kovariate nach Gruppen (hier: Kovariate `bdi1` (pretest))
+ggplot(plot_data, aes(bdi1, fill = group)) + 
+  geom_histogram(alpha = 0.5, aes(y = ..density..), position = "identity")
+``` 
+
+Wir sehen, dass die Verteilung der Depressionswerte vor der Intervention in der Kontrollgruppe (bis auf einige Ausreißer) weiter links (also im Bereich geringerer Depression) liegt als in der Interventionsgruppe. Die beiden Gruppen unterscheiden sich also deutlich in den Pretest-Werten, sodass es ratsam ist, `bdi1` als Kovariate zu berücksichtigen. 
+Analoge Darstellungen ließen sich für die anderen potentiellen Kovariaten erstellen.
+
+## Gruppenunterschied im Outcome
+
+Der Prima-Facie Effekt (PFE) kann anhand des einfachen (nicht adjustierten) Gruppenunterschieds im Outcome `bdi2` berechnet werden.
+
+```{r}
+lm(bdi2 ~ group, data = bdi_data)
+```
+
+Der PFE beträgt $-0.698$. Dieser Effekt ist nicht für Kovariaten adjustiert und entspricht damit mit hoher Wahrscheinlichkeit nicht dem wahren Treatment-Effekt!
+
+# Kovariatenmatching mit `MatchIt`
+
+- Im Paket `MatchIt` ist die Hauptfunktion `matchit()` enthalten
+  + Matching auf Gruppenvariable `X` anhand von Kovariaten (`Z1`, `Z2`, ...) 
+  + Angabe in Formelschreibweise (`X ~ Z1 + Z2`)
+  + Über Argument `method` Algorithmen auswählbar, z. B. `'exact'`, `'nearest'`
+  + Distanzmetriken wählbar über Argument `distance`
+  + Es gibt auch ein Argument für die Wahl des Calipers (`caliper`). Wir werden dieses aber im Folgenden nicht ansprechen, da wir erstmal die Default-Einstellung nutzen werden.
+- Voraussetzungen
+  + **Gruppenvariable** soll **numerisch** sein (kein Faktor)
+  + Kodierschema `IG=1`, `KG=0` sollte genutzt werden
+- Vorgehen  
+  + Ausgabe in Objekt ablegen (wie Modell in Regression)
+  + Mit verschiedenen Funktionen (z. B. `summary()`) darauf zugreifen)
+
+## Befehl mit Argumenten
+
+Funktion      | Bedeutung
+--------------|----------------------------------------
+`matchit(`                       | Sucht Matchingpartner für 
+       `treat ~ x1 + x2,`        | die Treatmentvariable (`treat`) mit einer oder mehrerer Kovariaten (`x1 + x2 + ...`)
+       `data,`                   | aus dem Datensatz `data`,
+       `method,`                 | mit nearest neighbor matching (`"nearest"`) als Default und bspw. exaktem Matching (`"exact"`) oder optimal matching (`"optimal"`) als weitere Optionen
+       `distance,`               | mit verschiedenen Distanzmaßen wie beispielsweise `mahalanobis`,
+       `ratio,`                  | mit z.B. `ratio = 1` (d.h., `1:1`)  oder anderen Ratios für die Anzahl der Personen in der Treatmentgruppe zu der Anzahl der zu matchenden Personen in der Kontrollgruppe
+       `replace)`              | mit `FALSE` als Default (ohne Zurücklegen) oder `TRUE` (mit Zurücklegen)
+
+Details siehe `?matchit`.  
+
+# Exaktes Matching
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2201126}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+Im Folgenden wenden wir das exakte Matching auf Basis der beiden Kovariaten `sess` und `addic` an. Bei dieser Methode werden die Argumente für die Distanzmetrik (`distance`) und das Verhältnis (`ratio`) nicht benötigt. Der Grund dafür ist, dass bei einem exakten Matching alle Teilnehmer miteinander abgeglichen werden, die identische Werte auf den Kovariaten aufweisen. Teilnehmer, für die kein entsprechender Matchingpartner mit identischen Werten gefunden wird, werden aus dem Matchingprozess ausgeschlossen.
+
+```{r}
+#| warning: false
+library(MatchIt)
+exakt <- matchit(group ~ sess + addic, data = bdi_data,
+                 method = "exact")
+exakt
+summary(exakt)
+```
+
+- Exaktes Matching erzeugt Klassen (hier: 42) mit identischen Werten auf den angegebenen Kovariaten $\mathbf{Z}$. Personen ohne identische/n PartnerInnen werden entfernt (`Unmatched`). Aus der Treatmentbedingung wurde hier also für 68 von insgesamt 76 Personen ein/e Matchingpartner/in gefunden. In der Kontrollbedingung konnten 114 von 179 Personen gematched werden. 
+- Die einzelnen Klassen können unterschiedlicher Größe sein und eine unterschiedliche Zahl von Personen aus jeder Gruppe beinhalten. Die Größe und Anzahl der Gruppenzugehörigkeiten der Personen in jeder Klasse können z.B. mit dem Befehl `summary(exakt)` ausgegeben werden. Wenn Sie sich die `summary` aufrufen, sehen Sie zum Beispiel, dass in der ersten Subklasse je 2 Personen in der Treatment- und der Kontrollgruppe sind. Diese 4 Personen haben also identische Werte auf den beiden Kovariaten.  
+- Die Größe der Klassen und Anzahl von ProbandInnen in der Kontroll- bzw. Treatmentgruppe in jeder Klasse muss bei der Berechnung der Treatment-Effekte berücksichtigt werden (s.u.).
+
+Zur Effektschätzung wird der Datensatz gematchter Personen inklusive Informationen zur `subclass` Zuordnung zunächst extrahiert. Dies erfolgt anhand des Befehls `match.data()`, welcher auf das angelegte `matchit`-Objekt zugreift.
+  
+```{r}
+exakt_data <- match.data(exakt)
+str(exakt_data)
+```
+
+Der Datensatz `exakt_data` enthält nur noch die 182 erfolgreich gematchten Personen. Die letzte Variable `subclass` gibt an, welcher Klasse ein/e Proband/in zugeordnet wurde. Mit einem Blick in den Datensatz können Sie nachvollziehen, dass Personen, die der gleichen Subklasse zugeordnet wurden (z.B. Person 1 und Person 4), identische Werte auf den Variablen `sess` und `addic` haben.
+
+## Imputation der *Potential Outcomes*
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2201128}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+Das Ziel des Matchings ist es, das *Counterfactual Outcome* (Wert in der nicht-beobachteten Bedingung) zu schätzen.
+  
+$$\widehat{Y}_i^0 = 
+  \begin{Bmatrix}
+   Y_i & \text{if} \quad X_{i} = 0 \\
+   \frac{1}{M} \sum_{j \in J_{M(i)}} Y_j & \text{if} \quad X_{i} = 1
+   \end{Bmatrix}$$
+
+$$\widehat{Y}_i^1 = 
+  \begin{Bmatrix}
+   \frac{1}{M} \sum_{j \in J_{M(i)}} Y_j & \text{if} \quad X_{i} = 0 \\
+   Y_i & \text{if} \quad X_{i} = 1
+   \end{Bmatrix}$$
+   
+wobei $J$ die Menge der $M$ gematchten Personen für Person $i$ ist.
+
+Beim exakten Matching werden die nicht-beobachteten Potential Outcomes durch den Mittelwert der Outcomes der Personen in der gleichen Subklasse aber  anderen Treatmentbedingung geschätzt/imputiert. Für eine Person in der Interventionsgruppe wird beispielsweise das Potential Outcome für die Kontrollbedingung durch den mittleren Wert der beobachteten Outcomes der KontrollprobandInnen geschätzt, die der gleichen Subklasse wie diese Person angehören.
+
+Wir müssen im Folgenden den Datensatz (`exact_data`) um zwei Variablen ergänzen, um den durchschnittlichen kausalen Effekt schätzen zu können:
+Für jede Person muss (in der Bedingung, in der sie nicht ist) ein Potential (*Counterfactual*) Outcome bestimmt und im Datensatz hinzugefügt werden. Außerdem werden wir für jede Person, in der Bedingung, in der sie ist, den Mittelwert im Outcome über alle Personen, die in der gleichen Subklasse sind, bestimmen und im Datensatz eintragen. Dies vereinfacht die weitere Berechnung. Für alle Personen kann dann die Differenz aus diesen beiden Outcomes  bestimmt werden und der Mittelwert ist der Schätzer für den durchschnittlichen kausalen Effekt:  
+
+$$\widehat{ATE}=\frac{1}{N} \sum_{i=1}^{N} (Y^1_i - Y^0_i)$$  
+
+In einem ersten Schritt erstellen wir subklassen- und treatmentspezifische Mittelwerte der Outcome- Variablen ($\frac{1}{M} \sum_{j \in J_{M(i)}} Y_j$), also je einen Mittelwert für alle Kombinationen aus Subklassen und Treatmentbedingungen (also insgesamt 42*2 Mittelwerte). Wir tun dies mithilfe des `aggregate()`-Befehls, mit dem wir in jeder Subklasse die Werte der Outcome-Variable `bdi2` separat für die Personen in der Experimental- und für die Personen in der Kontrollgruppe mitteln.
+
+```{r}
+agg <- aggregate(bdi2 ~ subclass + group,
+                 data = exakt_data, mean)
+head(agg) # Mit head() ruft man nur den oberen Abschnitt eines Objekts auf.
+```
+
+Im nächsten Schritt speichern wir die Potential Outcomes der Subklassen in zwei separaten Variablen (Mittelwerte nach Gruppen in Variable getrennt). Das heißt, wir erzeugen keine neue Information, sondern möchten den Datensatz `agg` so umstrukturieren, dass die Subklassen-Mittelwerte für die Kontrollbedingung ($\hat{Y}^0_i$) und die Subklassen-Mittelwerte für die Treatmentbedingung ($\hat{Y}^1_i$) in zwei verschiedenen Spalten (Variablen) dargestellt werden.
+
+```{r}
+wide <- reshape(agg, direction = "wide", sep = "_",
+                idvar = "subclass",   # eine Zeile pro subclass
+                timevar = "group")    # eine Variable pro Bedingung / Gruppe
+head(wide)
+```
+
+Im erzeugten Datensatz gibt es nun zwei Spalten für die Variable `bdi2`, eine für die mit den Subklassen-Mittelwerten der Kontrollgruppe (`bdi2_0`) und eine mit den Subklassen-Mittelwerten für die Treatmentgruppe (`bdi2_1`).
+
+Der Datensatz `wide` enthält pro Subklasse eine Zeile mit den Subklassen-Mittelwerten für die Kontroll- und die Treatmentgruppe (Potential Outcomes). Dieser Datensatz muss nun mit den Originaldaten zusammengefügt werden, sodass wir wieder eine Zeile pro Person erhalten. Für jede Person soll die neu gewonnene Information über die Potential Outcomes im Datensatz ergänzt werden. Diese Information kann anhand der Subklasse, in der die Person ist, zugeordnet werden. Ganz praktisch gesprochen: Die ersten vier Personen im Datensatz der gematchten Paare (`exact_data`) sind in Subklasse 1. Für sie soll also im Datensatz `exact_data` auf der Variable `bdi2_0` der Wert 23 eingetragen werden und auf der Variable `bdi2_1` der Wert 29. Dies sind die Potential Outcomes für die Subklasse 1, die wir gerade bestimmt haben.  
+
+Wir verwenden dafür den `merge()`-Befehl und geben dort die beiden Datensätze an, die wir zusammenfügen möchten und definieren mit dem Argument `by` die Variable, die in beiden Datensätzen vorkommt und anhand derer die Fälle zusammengeführt werden sollen.
+
+```{r}
+exakt_data_PO <- merge(exakt_data, wide, by = "subclass") # Vars hinzufügen
+head(exakt_data_PO)
+```
+
+Wir haben den Datensatz jetzt so erstellt, dass wir ihn als nächstes zur Effektschätzung verwenden könnnen.
+
+## Effektschätzung
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2201124}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+- Average Treatment Effect: $\widehat{ATE}=\frac{1}{N} \sum_{i=1}^{N} (Y^1_i - Y^0_i)$
+- Wir bilden im erzeugten Datensatz also den Mittelwert über die Differenz der zuvor erzeugten Variablen `bdi2_1` und `bdi2_0`.
+
+```{r}
+mean(exakt_data_PO$bdi2_1 - exakt_data_PO$bdi2_0)
+```
+- $\widehat{ATE} = -2,08$
+- Average Treatment Effect of the Treated: $\widehat{ATT}=\frac{1}{N_T} \sum_{i \in t} (Y^1_i - Y^0_i)$
+- Um diesen Effekt zu bestimmen, bilden wir einen Subdatensatz, der nur die Personen in der Treatmentgruppe beinhaltet, und bilden dann den Mittelwert in gleicher Weise wie zuvor.
+
+```{r}
+tg <- exakt_data_PO[exakt_data_PO$group == 1, ]  # Teildatensatz der Treatmentgruppe 
+mean(tg$bdi2_1 - tg$bdi2_0)
+```
+- $\widehat{ATT} = -3,21$  
+
+## Problem beim Exakten Matching
+
+Bei steigender Anzahl der Kovariaten wird exaktes Matching oft schwierig:
+  
+```{r}
+exakt2 <- matchit(group ~ age + sess + cogn + addic,
+                  data = bdi_data, method = "exact")
+exakt2
+```
+
+Bei Hinzunahme aller Kovariaten kann mit exaktem Matching nur eine einzige Person aus der Treatmentgruppe mit einer Person aus der Kontrollgruppe gematched werden.
+
+# Nearest Neighbor Matching
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2201125}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+## Entscheidungen
+
+- Distanzmetrik
+  + Bestimmung der Ähnlichkeit zweier Personen auf Basis der Kovariaten
+- Matching Strategie
+  + Anzahl der Matches (1:1, 1:M)
+  + Toleranz in Bezug auf Ähnlichkeit (Caliper)
+  + Mit oder ohne Zurücklegen (mehrfache Verwendung derselben Personen)
+- Algorithmus
+  + Kriterium und Reihenfolge (Greedy, Optimal, Nearest Neighbor, ...)
+- Indikatoren gelungenen Matchings
+  + Reduzierung der Unterschiede zwischen Gruppen auf den Kovariaten
+  + Gruppengrößen (Ausmaß des Datenverlusts)
+
+## Nearest Neighbor Matching
+
+- Nearest Neighbor Matching mit `matchit()` wird spezifiziert über das Argument `method="nearest"`. Als Distanzmaß wählen wir die Mahalanobis-Distanz mit `distance = "mahalanobis"`. Wir werden nun alle vorhandenen Kovariaten im Modell berücksichtigen.
+- Da im Nearest Neighbor Matching der `matchit()`-Befehl einen Zufallsprozess integriert hat, werden wir als erstes alle den gleichen Startwert definieren. Das führt dazu, dass wir alle das gleiche Ergebnis in den weiteren Analysen erhalten und dieses Ergebnis reproduzieren können, wenn wir jedes Mal vor Anwendung des `matchit()`-Befehls wieder den gleichen Startwert definieren. Diesen Startwert können wir beliebig wählen, es sollte nur bei allen derselbe Wert sein. Wir wählen hier nun den Startwert 1 und definieren ihn in R mit dem Befehl `set.seed()`.
+
+```{r}
+set.seed(1)
+near <- matchit(group ~ age + sess + cogn + addic + bdi1,  
+                data = bdi_data,                        
+                method = "nearest",       
+                distance = "mahalanobis",  # Mahalanobis-Distanz als Distanzmetrik
+                ratio = 1,           # 1:1 Matching (default)
+                replace = FALSE)     # ohne Zurücklegen
+```
+
+Nearest Neighbor Matching führt per Voreinstellung einen *greedy matching* Algorithmus durch. Alternativ kann auch Optimal Matching benutzt werden, bei dem ein globales Distanzmaß minimiert wird (minimale durchschnittliche absolute Distanz über alle Paare). Dafür verwendet man im `matchit()`-Befehl die Spezifikation `method = "optimal"`.
+
+Über das Argument `ratio` wird gesteuert, wieviele Kontrollprobanden einem Treatmentprobanden zugeordnet werden. Über das Argument `replace` wird eingestellt, ob matching mit oder ohne Zurücklegen stattfindet.
+
+Übersicht über die Matching-Ergebnisse und Verteilung der Kovariaten in den Gruppen vor und nach dem Matching bekommt man mithilfe des `summary()`-Befehls. (Sie können auch schon den `plot()`-Befehl ausprobieren. Diesen stellen wir in den nächsten Skripten ausführlicher dar.)
+
+```{r}
+summary(near, 
+        standardize = TRUE, 
+        improvement = TRUE)  # auch: plot(near)
+```
+
+Wir sehen, dass sich die Verteilungen nach dem Matching deutlich ähnlicher sind als zuvor. Zum Beispiel haben sich die `Means Treated` und `Means Control` nach dem Matching angenähert, was in einer verringerten Mittelwertsdifferenz (`Std. Mean Diff.`) zum Ausdruck kommt. Als Cut-off-Wert für einen gelungenen Matchingprozess wird ein maximaler standardisierter Bias von 0.25 (oder sogar von 0.10) verwendet (siehe auch nächste Sitzung zu den Propensity Scores). Selbst den weniger strengen Cut-off von 0.25 überschreiten wir hier sowohl für die Kovariate `cogn` als auch für `bdi1`. Idealerweise bräuchten wir also eine größere Stichprobe in der Kontrollgruppe, um passende MatchingpartnerInnen zu finden.
+
+Im Abschnitt `Percent Balance Improvement` kann in der ersten Spalte (`Std. Mean Diff`) abgelesen werden, um wie viel Prozent die Unterschiede zwischen den beiden Gruppen auf der jeweiligen  Kovariaten reduziert werden konnten. 
+
+Beim Nearest Neighbor Matching mit `ratio = 1` wird jeder_m ProbandIn in der Treatment-Gruppe ein_e ProbandIn aus der Kontrollgruppe zugeordnet.
+Daher gibt es beim Nearest Neighbor Matching keine `subclass` Variable.
+Informationen über die gebildeten Paare können abgerufen werden über 
+
+```{r}
+#| eval: false
+near$match.matrix
+```
+
+```{r}
+#| eval: false
+head(near$match.matrix)
+```
+
+Die Zeilennummern entsprechen den Zeilennummern der ProbandInnen in der Treatmentgruppe im ursprünglichen Datensatz (hier: `bdi_data`), die Werte in Anführungszeichen entsprechen den Zeilennummern der gematchten KontrollprobandInnen im ursprünglichen Datensatz.
+
+## Effektschätzung
+
+Wir extrahieren zunächst den Datensatz der gematchten Personen mithilfe des `match.data()`-Befehls:
+
+```{r}
+near_data <- match.data(near)
+```
+
+Wenn beim Nearest Neighbour Matching jeder_m Treatmentgruppen-ProbandIn exakt gleich viele KontrollprobandInnen zugeordnet werden und das Matching ohne Zurücklegen (`replace=FALSE`) durchgeführt wurde, ist eine Gewichtung (also ein Mitteln über alle Personen in der Kontrollgruppe, die derselben Person in der Treatmentgruppe zugeordet wurden, wie wir es oben beim exakten Matching getan haben) nicht notwendig.  Stattdessen kann der $\widehat{ATE}=\frac{1}{N} \sum_{i=1}^{N} (\hat{Y}^1_i - \hat{Y}^0_i)$ dann geschätzt werden als Differenz der gruppenspezifischen Mittelwerte (also als $\widehat{ATE}=(\frac{1}{N} \sum_{i=1}^{N} \hat{Y}^1_i) - (\frac{1}{N} \sum_{i=1}^{N}\hat{Y}^0_i)$). Wir bestimmen diese Differenz in einem einfachen Regressionsmodell mit `bdi2` als abhängiger Variable und der Gruppe (`group`) als Prädiktor. Dabei müssen wir darauf achten, den Datensatz nach dem Matching (`near_data`) zu verwenden.
+
+```{r}
+# Effektschätzung
+lm(bdi2 ~ group, data = near_data)
+```
+- $\widehat{ATE}=$ `r round(lm(bdi2 ~ group, data = near_data)$coef[[2]], 2)`: Der durchschnittliche kausale Effekt für die achtsamkeitsbasierte Intervention (als Ergänzung zur Standard-Therapie) ist eine Verminderung des Depressionswertes um `r round(abs(lm(bdi2 ~ group, data = near_data)$coef[[2]]), 2)` Punkte. 
+- Vorausgesetzt jeder_m TreatmentprobandIn werden gleich viele Kontrollproband*innen zugeordnet, entspricht beim Nearest Neighbor Matching der $\widehat{ATE}$ dem $\widehat{ATT}$.
+
+

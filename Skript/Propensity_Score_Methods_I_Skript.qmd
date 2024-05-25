@@ -1,0 +1,331 @@
+---
+toc: true
+toc-title: "Inhaltsverzeichnis"
+toc-depth: 3
+number-sections: true
+
+urlcolor: blue
+linkcolor: magenta
+
+callout-icon: false
+
+author: "Benedikt Lugauer"
+
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/packages.tex
+        - text: \chead{Kausale Effektschätzung in R - Propensity Score Methods I}
+
+geometry:
+  - marginparsep = 0.3in
+  - marginparwidth = 0in
+  - left = 0.85in
+  - right = 0.85in
+---
+
+# Propensity Score Methods I
+
+::: {.callout-note}
+## **Lernziele und Vorgehen** 
+  1. Schätzung der Propensity Scores  
+    a) beispielhaft über logistisches Regressionsmodell (`glm()`)  
+    b) integriert in `matchit()`
+  2. Prüfung des Overlap (Verteilung des PS) zwischen Gruppen
+  3. Prüfung der Balance (Verteilung der Kovariaten) zwischen Gruppen
+  4. ggfs. Anpassung des Modells
+:::
+
+Es ist wichtig zwei Prozesse zu unterscheiden: Die Schätzung des Propensity Scores und der Matching-Prozess kann mehrfach angepasst werden (Sitzung 3), **nicht jedoch** die Schätzung des Treatment-Effekts (Sitzung 4, siehe zum Beispiel [Data Dredging](https://en.wikipedia.org/wiki/Data_dredging)).
+
+## Vorbereitung 
+
+- Wir setzen das Arbeitsverzeichnis und öffnen den Datensatz `bdi_data.rda`.
+- Wir aktivieren das Paket `MatchIt`.
+- Außerdem setzen wir zur Reproduzierbarkeit der Ergebnisse, die einen Zufallsprozess beinhalten, den Startwert des Zufallszahlengenerators über `set.seed()` fest.
+
+```{r}
+#| echo: false
+setwd(this.path::this.dir())
+load("../Datensätze/bdi_data.rda")
+library(MatchIt)
+set.seed(12345)  
+```
+
+```{r}
+#| eval: false
+setwd("C:/Users/me/myworkingdirectory")
+load("bdi_data.rda")
+library(MatchIt)
+set.seed(12345)  # Zur Vergleichbarkeit der Ergebnisse
+```
+
+- Wir arbeiten mit demselben Datensatz wie in der vorherigen Sitzung zum Kovariaten-Matching. 
+- In dem Skript zur 2. Sitzung finden sich auch die Deskriptivstatistiken nach Gruppen aufgeteilt. 
+
+Zur Erinnerung: 
+  
+- Die Gruppenvariable $X$ heißt hier `group` (`group==1` bedeutet, zusätzlich wurde bei den PatienntInnen eine achtsamkeitsbasierte Intervention drchgeführt).
+- Das Outcome $Y$ ist der Depressionswert zum 2. Messzeitpunkt, `bdi2`.
+- Mögliche Kovariaten $Z_i$ bzw. $\mathbf{Z}$ sind 
+  + der Depressionswert vor der Intervention, (`bdi1`)
+  + das Alter (`age`)
+  + die Anzahl bisheriger Therapiesitzungen (`sess`)
+  + eine Skala der kognitiven Leistungsfähigkeit (`cogn`), und
+  + das Vorliegen einer Substanzabhängigkeit (`addic`; `0` = nein, `1` = ja)
+
+## Grundidee
+
+Statt beim Kovariaten-Matching auf vielen Kovariaten zu matchen, wird pro Prson als Linearkombination aller Kovariaten ein Wert, der *Propensity Score* (S) geschätzt und die Personen nach diesem gematcht. Dieser Matching-Prozess kann überprüft und wiederholt werden, bis ein zufriedenstellendes Ergebnis erreicht ist. Der Propensity Score (PS) ist für jede Person die geschätzte Wahrscheinlichkeit, zur Behandlungs- oder Kontrollgruppe zu gehören, basierend auf ihren Werten für die Kovariaten:
+$$ \pi = P(X=1|\mathbf{Z}) $$
+
+- $\pi$: Propensity Score  
+- $P(X=1|\mathbf{Z})$: Bedingte Wahrscheinlichkeit, in der Treatment-Gruppe zu sein, gegeben Kovariaten $\mathbf{Z}$
+
+Ziel: Es soll die Bedingung der **Strong Ignorability** erfüllt sein, das heißt, die *potential outcome* Ergebnisse $Y^0$ und $Y^1$ sollen unabhängig von der Treatmentzuweisung $X$ sein, wenn $\pi$ kontrolliert wird.
+
+$$ (Y^0,Y^1) \perp X | \pi $$
+  
+## Schätzung
+
+- Die Propensity Scores können mithilfe der logistischen Regression geschätzt werden.
+- Zunächst verwenden wir die bekannte `glm()` Funktion, um die Schätzung manuell durchzuführen, und erhalten dann in einem zweiten Schritt die geschätzten Werte (= Propensity Scores).
+- Als praktische Alternative zeigen wir das Vorgehen mit der Verwendung der `matchit()` Funktion.
+
+### Mehrschrittig mit `glm()`
+
+- In der logistischen Regression sieht das Modell auf der rechten Seite der Rgressionsgleichung wie in der multiplen Regression aus (nur ohne Fehlerterm).
+- Außerdem wurde das $X$ der Prädiktoren mit $Z$ für Kovariaten ersetzt. Pädiktor ist die Bezeichnung der unabhängigen Variablen in der Rgressionsgleichung, Kovariate ist die Bezeichnung der Rolle der Variablen im Mdell, also Kontrollvariable, korrigierende Variable.
+- Die linke Seite der Gleichung ist logit-transformiert, das bedeutet, sie repräsentiert die logarithmierten Odds (Verhältnis der Chancen) in der Treatmentbedingung zu sein vs. in der Kontrollbedingung zu sein, gegeben den Kovariaten.
+- Das fett gedruckte $\mathbf{Z}$ entspricht dabei allen $Z$-Variablen auf dr rechten Seite der Gleichung (in Matrixschreibweise).
+ $$ \text{ln}\left(\frac{P(X=1|\mathbf{Z})}{1-P(X=1|\mathbf{Z})}\right) = \beta_0 + \beta_1 Z_1 + \beta_2 Z_2 + \ldots + \beta_k Z_k $$
+- Um den Logit wieder in den Propensity Score -- die Wahrscheinlichkeit $\pi = P(X=1|\mathbf{Z})$ -- umzurechnen, muss die rechte Seite der Gleichung umgeformt werden.
+ 
+ $$\pi = P(X=1|\mathbf{Z})= \frac{e^{\beta_0 + \beta_1 Z_1 + \beta_2 Z_2 + \ldots + \beta_k Z_k}}{1+e^{\beta_0 + \beta_1 Z_1 + \beta_2 Z_2 + \ldots + \alpha_k Z_k}}$$
+ 
+- In R kann die logistische Regression berechnet werden mithilfe des `glm()`-Befehls (*generalized linear model*). 
+- Wir spezifizieren im Folgenden eine logistische Regression zur Vorhersage unserer Treatmentbedingung `group` durch die im Datensatz vorhandenen Kovariaten `bdi1`, `age`, `cogn`, `sess` und `addic`.
+ 
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2203923}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+ 
+```{r}
+mod_ps <- glm(group ~ bdi1 + age + cogn + sess + addic,
+              data = bdi_data, 
+              family = binomial)
+```
+
+- Das Argument `family` spezifiziert dabei die Verteilungsannahme für unsere abhängige Variable (hier: die Treatmentbedingung $X$). Die Option `(link = 'logit')` ist hier weggelassen, da der Logit die Standardeinstellung für `binomial` ist.
+- Die geschätzten Werte (Propensity Scores) und die dazugehörigen logits können pro Person extrahiert und zum Beispiel dem Datensatz hinzugefügt werden mit den Befehlen:
+- `predict()`: gibt vorhergesagten Logit aus
+- `fitted()`: gibt $\hat{P}(X=1|\mathbf{Z})$ -- die PS -- aus
+
+```{r}
+bdi_data$logit <- predict(mod_ps)
+bdi_data$Pscore <- fitted(mod_ps)
+head(bdi_data)
+```
+
+- Für die ersten sechs Personen im Datensatz kann man sehen, dass alle in der Interventionsgruppe waren (`group == 1`), ihr PS aber variiert von 0.27 bis 0.58.
+- Wahrscheinlichkeiten, die geringer als 0.5 sind, gehen mit einem negativen Logit einher.
+- Anhand dieser `Pscore` Variable könnte man nun matchen. Wir nutzen im folgenden aber das Paket `MatchIt`, das Schätzung und Matching in einem Schritt erledigt.
+
+### Integriert in `MatchIt`
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2203925}{\includegraphics[width=1cm]{_img/vid.png}}
+}
+
+- Die Voreinstellung für das Distanzmaß in der Funktion `matchit()` lautet `distance = "logit"`, was dem gerade berechneten PS entspricht. 
+- Die vorherige Berechnung über `glm()` ist dabei nicht notwendig.
+- Wir möchten nun Treatment- und Kontrollprobanden in unserem `bdi_data`-Datensatz anhand von Nearest Neighbor Matching auf Basis des Propensity Scores matchen. Dafür verwenden wir alle vorhandenen Kovariaten:
+```{r}
+#| warning: false
+ps_mi <- matchit(group ~ bdi1 + age + cogn + sess + addic,
+                 data = bdi_data, 
+                 method = "nearest", 
+                 distance = "logit")
+```
+
+## Überprüfung 
+
+Es stehen für `matchit` Objekte zur Überprüfung von Overlap und Balance die `summary()` und `plot()` Funktionen mit folgenden Optionen zur Verfügung:
+
+### `summary()` Optionen
+
+Der `summary()` Befehl gibt Kennwerte der Balance für gematchte und ungematchte Stichproben aus. 
+  
+Argument               | Bedeutung
+--------------|------------------------
+`standardize = TRUE`   | Standardisierte Mittelwertsdifferenzen etc. 
+`interactions = TRUE`  | Kennwerte auch für Interaktionsterme berichten, die nicht unbedingt im Modell enthalten sind
+`addlvariables = TRUE` | Kennwerte auch für Variablen berichten, die nicht im (PS-)Modell enthalten sind
+
+### `plot()` Optionen
+
+Der `plot()` Befehl generiert Grafiken zur Beurteilung von Overlap und Balance.
+
+Argument    | Bedeutung
+-----------|------------------------
+`type = "jitter"`   | PS-Verteilung nach Treatment-Gruppen und Unmatched vs. Matched
+`type = "hist"`     | PS-Verteilung getrennt nach Gruppen und Raw vs. Matched
+`type = "QQ"`       | Gruppenspezifische Kovariaten-Verteilungen als QQ-Plot
+`interactive = TRUE`| Ob die Grafik interaktiv angezeigt werden sollen
+`discrete = 1`      | Verhindern des *Jitterns* für dichotome Variablen 
+`which.xs = `       | Auswählen welche Kovariaten angezeigt werden sollen
+`subclass = `       | Falls einzelne Subgruppen ausgewählt werden sollen (Strazifizierung, s.u.)
+
+- `plot(summary(ps_mi, standardize = TRUE))` 
+  + Veränderung in der standardisierten Mittelwertsdifferenz durch Matching
+- Ggfs. `layout(1)` ausführen, um die Darstellung eines einzelnden Plots wiederherzustellen (statt 4 in 1).
+
+### Overlap im PS
+
+- Zunächst betrachten wir die Verteilung der Propensity Scores.
+
+```{r}
+#| fig-height: 5
+plot(ps_mi, type = "jitter", interactive = FALSE)
+```
+- In dieser Abbildung sind die PS auf der $X$-Achse für Personen nach Gruppenzugehörigkeit dargestellt: 
+  + Personen in der Treatment-Gruppe, die nicht gematcht wurden (*Unmatched Treatment Units*, hier nicht vorhanden) 
+  + Personen in der Treatment-Gruppe, die gematcht wurden (*Matched Treatment Units*, hier alle)
+  + Personen in der Kontroll-Gruppe, die gematcht wurden (*Matched Control Units*) 
+  + Personen in der Kontroll-Gruppe, die nicht gematcht wurden (*Unmatched Control Units*) 
+- Von besonderem Interesse ist also der Vergleich der mittleren beiden Gruppen (die gematchte Stichprobe).
+- Zunnächst einmal ist festzustellen, dass es über alle Gruppen hinweg starke Unterschiede im PS zwischen Personen gibt (Streubereich 0.03 bis 0.88). 
+- Personen mit sehr hohen (>0.8) und sehr niedrigen (ca. <.08, s.u.) Propensity Scores kommen lediglich in der Kontrollgruppe vor. Diese Bereiche des PS fallen somit nicht in die *region of common support* und die entsprechenden Personen wurden nicht gematcht.
+- Als nächstes visualisieren wir uns die Verteilung der Propensity Scores in der Gesamtstichprobe (Raw) sowie der Stichprobe der gematchten Personen (Matched) getrennt nach Treatment-Gruppen anhand eines Histogramms:
+```{r}
+#| fig-height: 5
+plot(ps_mi, type = 'hist')
+```
+- Man erkennt, dass sich die Verteilung der Treated (1. Zeile) nicht verändert hat, da niemand ausgeschlossen wurde.
+- Die Verteilung des Propensity Scores in der Kontrollgruppe ist nach dem Matching weniger linkssteil und hat sich der Verteilung der Treatmentbedingung angenähert.
+- Falls man gerne die Verteilungskennwerte der PS pro Gruppe nach dem Matching erhalten möchte, bietet es sich an, die Zusammenfassung für den PS getrennt nach der Gruppe anzufordern. Der Variablenname, der von `matchit()` für die PS verwendet wird, ist `distance`.
+```{r}
+aggregate(distance ~ group, data = match.data(ps_mi), summary)
+```
+- Im unteren Bereich der Verteilung (Minimum und 1. Quartil) sind sich die Verteilungen sehr ähnlich, ab dem Median hat die Treatment-Gruppe aber jeweils (leicht) höhere Werte.
+
+### Balance auf den Kovariaten
+
+Für eine Zusammenfassung der Balance auf den Kovariaten lassen wir uns die `summary()` des matchings ausgeben.  
+
+- Richtwerte für standardisierte Mittelwertsunterschiede:  
+  + $<.25$ SD (z. B. Stuart & Rubin, 2007)
+  + $<.10$ SD (z. B. Steiner et al., 2010)
+  
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2203924}{\includegraphics[width=1cm]{_img/vid.png}}
+} 
+
+```{r}
+#| eval: false
+summary(ps_mi, standardize = TRUE, improvement = TRUE)
+```
+  
+```{r}
+#| echo: false
+#| warning: false
+cat('Summary of balance for all data:')
+summary(ps_mi, standardize = TRUE)$sum.all[, c(1, 2, 3)]
+```
+
+Im ersten Abschnitt (`Summary of balance for all data`) sehen wir die Kennwerte für die Gesamtstichprobe vor dem Matching. Für die PS haben wir eine standardisierte Mittelwertsdifferenz (`Std. Mean Diff.`) von $\approx1$. Die Spalten, die mit `eCDF` beginnen, sind nicht abgebildet und werden im Rahmen der QQ-Plots erörtert. 
+  
+```{r}
+#| echo: false
+#| warning: false
+cat('Summary of balance for matched data:')
+summary(ps_mi, standardize = TRUE)$sum.matched[, c(1, 2, 3)]
+```
+
+Im zweiten Abschnitt (`Summary of balance for matched data`) sehen wir die Kennwerte für die gematchte Stichprobe. Die standardisierte Mittelwertsdifferenz (`Std. Mean Diff.`) beträgt bis zu 0.19 auf dem PS und 0.16 auf den Vortestwerten `bdi1`. Nach dem strengen Kriterium von Steiner wäre dies zu hoch. 
+  
+```{r}
+#| echo: false
+cat('Percent Balance Improvement:')
+summary(ps_mi, standardize = TRUE, improvement = TRUE)$reduction[,c(1, 2)]
+```
+
+Im unteren Abschnitt werden die beiden vorherigen verglichen und die Verbesserung in Prozent angegeben. So hat sich die absolute Ungleichheit auf `age` von 0.285 (all data) auf 0.009 (matched data) um rund (0.285-0.009)/0.285 = 96.68% verbessert.  
+Die extrem hohe Verschlechterung bei `addic` ist darauf zurückzuführen, dass der Unterschied vor dem Matching quasi 0 war (und an diesem ja relativiert wird). Außerdem handelt es sich um ein dichotomes Merkmal, so dass die Mittelwerte als relative Häufigkeiten interpretiert werden können. 
+  
+```{r}
+#| echo: false
+#| warning: false
+cat('Sample Sizes:')
+summary(ps_mi, standardize = TRUE)$nn
+```
+
+Der letzte Abschnitt gibt eine Übersicht der Häufigkeiten pro Gruppe von ursprünglich enthaltenen (`All`), (un-)gematchten (`Matched` und `Unmatched`) und ausgeschlossenen Personen (`Discarded`; falls bei `matchit()` das Argument `discard` spezifiziert wurde).
+
+### Anpassung des Modells
+
+\marginpar{
+    \href{https://moodle2.uni-leipzig.de/mod/lti/view.php?id=2203926}{\includegraphics[width=1cm]{_img/vid.png}}
+} 
+
+Falls wir das strenge Kriterium anwenden, können wir mit der Balance noch nicht zufrieden sein. Um die Schätzung des PS zu ändern, kann das Modell, das zur Schätzung genutzt wird, um Variablen oder Terme erweitert werden. Da wir bereits alle Variablen im Datensatz im Modell haben, bleibt uns noch die Möglichkeit, nach Termen zu schauen, die wir in den PS einfließen lassen wollen. 
+- Man könnte über den `caliper` auch strengere Matching-Kriterien definieren, riskiert dabei aber einen Verlust an Personen.
+- In unserem Fall ist es ausreichend, denn Matching-Algorithmus zu ändern auf `optimal` (Paket `optmatch` muss installiert sein):
+  
+```{r}
+#| eval: false
+ps_mi2 <- matchit(group ~ bdi1 + cogn + age + sess + addic, data = bdi_data, 
+                  method = "optimal", 
+                  distance = "logit")
+summary(ps_mi2, standardized = TRUE)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+ps_mi2 <- matchit(group ~ bdi1 + cogn + age + sess + addic,
+                  data = bdi_data, 
+                  method = "optimal", 
+                  distance = "logit")
+cat('Summary of balance for matched data:')
+summary(ps_mi2, standardize = TRUE)$sum.matched[, 1:4]
+```
+
+Die Veränderung der standardisierten Mittelwertsunterschiede lässt sich gut darstellen über die `plot()` Funktion, angewendet auf die `summary()` des `matchit` Objekts: 
+
+```{r}
+#| fig-height: 5
+plot(summary(ps_mi2, standardize = TRUE)) 
+```
+  
+### QQ-Plots der Kovariaten
+
+- In der `summary()` haben wir uns bisher v.a. auf die *mittleren* Unterschiede konzentriert. 
+- Die Spalten mit `eCDF` bzw. im unstandardisierten Fall `eQQ` beziehen sich auf andere Punkte der Verteilung, die sich gut in sog. QQ-Plots abbilden lassen.
+- Hierbei sind die Quantile der Kontrollgruppe auf der $X$-Achse gegen die Quantile der Treatment-Gruppe auf der $Y$-Achse abgetragen. Bei gleicher Verteilung befinden sich alle Punkte auf der diagonalen Linie. 
+- Wir betrachten diesen Plot für die Kovariaten `bdi1`, `age` und `cogn`. Im Gegensatz zu oben ist dies ein Ausschnitt der unstandardisierten Ausgabe.
+- Beispielsweise beträgt der unstandardisierte Unterschied der Maxima von `bdi1` zwischen den Gruppen 4 Punkte, der entsprechende Punkt liegt abseits der Diagonalen, aber noch innerhalb des angezeigten Toleranzbereiches.
+  
+
+```{r}
+#| eval: false
+summary(ps_mi2)
+```
+
+```{r}
+#| echo: false
+cat('Summary of balance for matched data:')
+summary(ps_mi2)$sum.matched[c("bdi1", "cogn", "age"),]
+```
+
+```{r}
+#| fig-align: left
+#| fig-height: 3
+#| fig-width: 7
+plot(ps_mi2, type = "QQ",
+     which.xs = c("bdi1", "cogn", "age")) # Auswahl Kovariaten
+```
+
+
+
+

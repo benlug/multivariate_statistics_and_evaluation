@@ -1,0 +1,153 @@
+---
+format: 
+  pdf:
+    include-in-header: 
+        - file: _tex/preamble.tex
+        - text: |
+            \chead{Musterlösung 6 - Längsschnittanalysen II}
+            \fancyfoot[CO]{J. Holtmann, B. Lugauer, K. Koslowski | Multivariate Statistik \& Evaluation | SS 23}
+---
+
+# Aufgaben: Längsschnittanalaysen und Veränderungsmessung II
+
+## Aufgabe 1: Quadratisches Wachstum
+
+Als Vorbereitung müssen das lme4-Paket und der affect-Datensatz geladen werden. 
+
+```{r}
+#| echo: false
+#| message: false
+setwd(this.path::this.dir())
+load("../Datensätze/affect.rda")
+load("../Datensätze/affect_wide_short.rda")
+library(lme4)
+```
+
+```{r}
+#| eval: false
+setwd("myworkindirectory")
+load("affect.rda")
+library(lme4)
+```
+
+Schätzen Sie erneut das Modell, in dem die gute vs. schlechte Stimmung (Variable gut) linear von der Tageszeit vorhergesagt wird. Das Ausgangsniveau der Stimmung darf dabei über Personen variieren (random intercept Modell). Erweitern Sie das Modell dann zunächst um einen zufälligen Effekt der linearen Komponente (random slopes Modell).
+
+```{r}
+line <-  lmer(gut ~ 1 + time + (1 | ID), affect)
+line_rs <-  lmer(gut ~ 1 + time  + (1 + time | ID), affect)
+summary(line_rs)
+```
+
+Erstellen Sie im nächsten Schritt ein Modell mit zusätzlichem quadratischen Trend (fixed effect). Um Problemen vorzubeugen, reskalieren Sie die Variable time vor der Schätzung, indem Sie sie halbieren.
+
+```{r}
+affect$time <- affect$time / 2
+affect$time_quad <- affect$time^2
+```
+
+```{r}
+quad_rs1<-  lmer(gut ~ 1 + time + time_quad + (1 + time  | ID), affect)
+summary(quad_rs1)
+```
+
+Erweitern Sie das Modell nun um einen zufälligen Effekt der quadratischen Komponente. Nutzen Sie zur Schätzung der Modelle bei Bedarf einen anderen Optimizer. Konsultieren Sie ggf. die Hilfe-Funktion um diesen auszuwählen.
+
+```{r}
+quad_rs2 <-  lmer(gut ~ 1 + time + time_quad + (1 + time  + time_quad| ID), affect)
+```
+
+Warnmeldung bezieht sich auf ein recht strenges Konvergenzkriterium zum Test mit anderem Optimizer schätzen:
+```{r}
+quad_rs2 <-  lmer(gut ~ 1 + time + time_quad + (1 + time  + time_quad| ID), affect, 
+                  control=lmerControl(optimizer="Nelder_Mead"))
+summary(quad_rs2)$var
+```
+
+Warnmeldung in random slope Modell kann hier auch dadurch zustande kommen, dass die Varianz der quadratischen Komponente sehr klein (0.051664^2 = 0.002669169) ist (boundary value der random effect variance)
+
+Für welches der vier vorhergehenden Modelle würden Sie sich aufgrund der Inferenzstatistik entscheiden? 
+Lineares Modell muss für den Vergleich mit neuer time-Skalierung erneut geschätzt werden
+```{r}
+line <- lmer(gut ~ 1 + time  + (1  | ID), affect)
+line_rs <-  lmer(gut ~ 1 + time  + (1 + time | ID), affect)
+# quad_rs1<-  lmer(gut ~ 1 + time + time_quad + (1 + time  | ID), affect)
+# quad_rs2 <-  lmer(gut ~ 1 + time + time_quad + (1 + time  + time_quad| ID), affect)
+```
+
+```{r}
+anova(line, line_rs,refit=F)
+anova(line_rs,quad_rs1)
+anova(quad_rs1,quad_rs2,refit=F)
+anova(quad_rs2,line_rs,refit=F)
+```
+
+Modell mit random effects der linearen Zeitkomponente, aber ohne quadratischen Effekt sollte bevorzugt werden 
+
+## Aufgabe 2: Level-1 und Level-2 Kovariaten
+
+Nehmen Sie in das quadratische Wachstumskurvenmodell der guten Stimmung (mit Random Slopes nur für die lineare Komponente) das Auftreten von positiven (Variable pos) und negativen Ereignissen (neg) als L1-Prädiktoren auf. Sind die Prädiktoren bedeutsam für die gute Stimmung?
+
+```{r}
+quad_pred_L1 <-  lmer(gut ~ 1 + time +  time_quad + pos + neg + (1 + time  | ID), affect)
+summary(quad_pred_L1)
+```
+
+```{r}
+confint(quad_pred_L1,method = "boot", n = 1000)
+anova(quad_pred_L1, quad_rs1)
+```
+
+--> Ja, beide Prädiktoren haben ein Regressionsgewicht dessen KI nicht die Null überdeckt und das Modell mit den beiden Prädiktoren ist laut LRT Test zu bevorzugen (Chi^2(2)=76.165, p < 0.001).
+
+Welcher Anteil der Level-1 Residualvarianz kann durch Hinzunahme der Prädiktoren pos und neg im Vergleich zum Ausgangsmodell (quadratische Wachstumskurvenmodell) aufgeklärt werden? Konsultieren Sie zum Lösen der Aufgabe das Skript zu R^2 in Mehrebenenmodellen aus dem Wintersemester.
+```{r}
+m1 <-  lmer(gut ~ 1 + time +  time_quad  + (1   | ID), affect)
+m2 <- lmer(gut ~ 1 + time +  time_quad + pos + neg + (1   | ID), affect)
+```
+
+```{r}
+rti.H0 <- sigma(m1)^2
+rti.H1 <- sigma(m2)^2
+(rti.H0 - rti.H1) / rti.H0
+```
+Die Aufnahme der beiden L1-Prädiktoren reduziert die L1-Residualvarianz um ca. 9,5%.
+
+Untersuchen Sie, ob der BDI einen Einfluss auf das Stimmungsniveau zu Beginn des Tages und auf die individuellen Verlaufskomponenten der guten Stimmung hat. Gehen Sie von einem Modell ohne zusätzliche L1-Prädiktoren aus. Wieviel Varianz in den random slopes kann durch die Hinzunahme der Cross-level Interaktion erklärt werden?
+
+```{r}
+quad_pred_L2 <-  lmer(gut ~ 1 + time*BDI + time_quad  + (1 + time  | ID), affect)
+summary(quad_pred_L2)$coef
+confint(quad_pred_L2)
+anova(quad_pred_L2,quad_rs1)
+
+summary(quad_rs1)$var
+u1i.H0 <- 0.16835^2
+summary(quad_pred_L2)$var
+u1i.H1 <- 0.16410^2
+(u1i.H0 - u1i.H1) / u1i.H0
+```
+
+ca. 5% der Varianz in den random slopes kann durch den BDI erklärt werden
+
+## Aufgabe 3: Kontexteffekte 
+
+Untersuchen Sie, ob die Anspannung (positiv kodiert als Variable ruhig) auf dem within- (direkt zeitlich) und/oder auf dem between-level (als tagesspezifischer Trait) einen Einfluss auf die gute Stimmung hat. Nutzen Sie hierfür der Einfachheit halber ein random slopes Modell mit linearem Verlauf (ohne quadratischen Effekt). Zentrieren Sie dafür die Variable ruhig an ihrem jeweiligen cluster-mean. Zentrieren Sie die personen-spezifische mittlere Anspannung am grand mean.
+
+```{r}
+# Erstellung der cluster-means
+ruhig_gm <- aggregate(ruhig ~ ID,data=affect,mean)
+names(ruhig_gm) <- c("ID","ruhig_gm")
+affect <- merge(affect,ruhig_gm,by="ID")
+# Zentrierung
+affect$ruhig.gmc <- affect$ruhig - affect$ruhig_gm
+affect$ruhig_gm.gra <- scale(affect$ruhig_gm, scale = FALSE)
+# Kontextmodell
+kontext <- lmer(gut ~ 1 + time + ruhig.gmc + ruhig_gm.gra 
+                + (1 + time | ID), 
+                data = affect)
+summary(kontext)
+
+confint(kontext,method = "boot", n = 1000)
+```
+
+
