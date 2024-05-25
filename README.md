@@ -1,5 +1,3 @@
-A summary with links to my projects related to data science and # Multivariate Statistics and Causal Inference
-
 Welcome to the repository for a graduate course on Multivariate Statistics and Causal Inference. This course includes scripts, exercise sheets, sample solutions, and datasets. 
 
 ## Resources
