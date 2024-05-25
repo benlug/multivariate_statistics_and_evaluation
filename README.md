@@ -1,4 +1,40 @@
-# multivariate statistics and evaluation
- 
-This repository contains the course materials for the computational part of a multivariate statistics and evaluation course (in german)
+A summary with links to my projects related to data science and # Multivariate Statistics and Causal Inference
 
+Welcome to the repository for a graduate course on Multivariate Statistics and Causal Inference. This course includes scripts, exercise sheets, sample solutions, and datasets. 
+
+## Resources
+
+- Scripts: Detailed scripts for various statistical methods and analyses.
+- Exercise Sheets: Practice exercises.
+- Sample Solutions: Solutions to the exercises for self-assessment.
+- Data Sets: Data needed to perform the analyses.
+
+## Available Materials
+
+## Table of Contents 
+
+1. **Propensity Score Methods I**.
+   - Introduction to propensity score matching
+   - Logistic regression for propensity score estimation
+   - Overlap and balance checking
+   - Matching using the MatchIt package
+
+2. **Propensity Score Methods II**.
+   - Advanced Propensity Score Techniques
+   - ANCOVA with Propensity Scores
+   - Propensity Score Stratification
+   - Weighting with Propensity Scores
+
+3. **Covariate Matching
+   - Detailed methods for covariate matching
+   - Statistical checks and adjustment techniques
+
+4. **Longitudinal Analysis I
+   - Introduction to longitudinal data analysis
+   - Growth curve models
+   - Linear and nonlinear growth models
+
+5. **Longitudinal Analysis II
+   - Quadratic growth curve models
+   - Including Covariates in Growth Models
+   - Model Comparison and Evaluation Data Engineering.
