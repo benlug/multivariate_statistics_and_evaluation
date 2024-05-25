@@ -1,4 +1,4 @@
-Welcome to the repository for a graduate course on Multivariate Statistics and Causal Inference. This course includes scripts, exercise sheets, sample solutions, and datasets. 
+Welcome to the repository for a graduate course in the social sciences on Multivariate Statistics and Causal Inference using R. This course includes scripts, exercise sheets, sample solutions, and datasets. 
 
 ## Resources
 
