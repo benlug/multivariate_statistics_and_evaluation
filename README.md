@@ -35,4 +35,4 @@ This is a repository for a graduate course in the social sciences on Multivariat
 5. **Longitudinal Analysis II**
    - Quadratic growth curve models
    - Including Covariates in Growth Models
-   - Model Comparison and Evaluation Data Engineering.
+   - Model Comparison
