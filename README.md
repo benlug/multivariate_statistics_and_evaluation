@@ -15,10 +15,9 @@ This is a repository for a graduate course in the social sciences on Multivariat
    - Introduction to propensity score matching
    - Logistic regression for propensity score estimation
    - Overlap and balance checking
-   - Matching using the MatchIt package
+   - Matching using the `MatchIt` package
 
 2. **Propensity Score Methods II**
-   - Advanced Propensity Score Techniques
    - ANCOVA with Propensity Scores
    - Propensity Score Stratification
    - Weighting with Propensity Scores
