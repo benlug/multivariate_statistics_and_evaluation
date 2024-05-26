@@ -7,8 +7,6 @@ Welcome to the repository for a graduate course in the social sciences on Multiv
 - Sample Solutions: Solutions to the exercises for self-assessment.
 - Data Sets: Data needed to perform the analyses.
 
-## Available Materials
-
 ## Table of Contents 
 
 1. **Propensity Score Methods I**.
