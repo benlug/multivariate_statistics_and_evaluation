@@ -11,28 +11,28 @@ This is a repository for a graduate course in the social sciences on Multivariat
 
 ## Table of Contents 
 
-1. **Propensity Score Methods I**.
+1. **Propensity Score Methods I**
    - Introduction to propensity score matching
    - Logistic regression for propensity score estimation
    - Overlap and balance checking
    - Matching using the MatchIt package
 
-2. **Propensity Score Methods II**.
+2. **Propensity Score Methods II**
    - Advanced Propensity Score Techniques
    - ANCOVA with Propensity Scores
    - Propensity Score Stratification
    - Weighting with Propensity Scores
 
-3. **Covariate Matching
+3. **Covariate Matching**
    - Detailed methods for covariate matching
    - Statistical checks and adjustment techniques
 
-4. **Longitudinal Analysis I
+4. **Longitudinal Analysis I**
    - Introduction to longitudinal data analysis
    - Growth curve models
    - Linear and nonlinear growth models
 
-5. **Longitudinal Analysis II
+5. **Longitudinal Analysis II**
    - Quadratic growth curve models
    - Including Covariates in Growth Models
    - Model Comparison and Evaluation Data Engineering.
