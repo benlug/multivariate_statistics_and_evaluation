@@ -1,6 +1,6 @@
 # Multivariate Statistics and Causal Inference Using R
 
-This is a repository for a graduate course in the social sciences on Multivariate Statistics and Causal Inference using R. This course includes scripts, exercise sheets, sample solutions, and datasets. 
+This is a repository for a graduate course in the social sciences on Multivariate Statistics and Evaluation using R. This course includes scripts, exercise sheets, sample solutions, and datasets. 
 
 ## Resources
 
