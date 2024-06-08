@@ -1,4 +1,4 @@
-# Multivariate Statistics and Causal Inference Using R
+# Multivariate Statistics and Evaluation Using R
 
 This is a repository for a graduate course in the social sciences on Multivariate Statistics and Evaluation using R. This course includes scripts, exercise sheets, sample solutions, and datasets. 
 
